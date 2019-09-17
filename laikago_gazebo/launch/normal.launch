@@ -26,10 +26,10 @@
     <!-- Set trunk and joint positions at startup -->
     <node pkg="gazebo_ros" type="spawn_model" name="urdf_spawner" respawn="false" output="screen"
           args="-urdf -z 0.6 -model laikago_gazebo -param robot_description
-          -J FL_hip_joint 0.0 FL_thigh_joint 0.6 FL_calf_joint -1.2 
-             FR_hip_joint 0.0 FR_thigh_joint 0.6 FR_calf_joint -1.2
-             RL_hip_joint 0.0 RL_thigh_joint 0.6 RL_calf_joint -1.2
-             RR_hip_joint 0.0 RR_thigh_joint 0.6 RR_calf_joint -1.2 -unpause"/>
+          -J FL_hip_joint 0.0 -J FL_thigh_joint 0.6 -J FL_calf_joint -1.2
+          -J FR_hip_joint 0.0 -J FR_thigh_joint 0.6 -J FR_calf_joint -1.2
+          -J RL_hip_joint 0.0 -J RL_thigh_joint 0.6 -J RL_calf_joint -1.2
+          -J RR_hip_joint 0.0 -J RR_thigh_joint 0.6 -J RR_calf_joint -1.2 -unpause"/>
 
     <!-- Load joint controller configurations from YAML file to parameter server -->
     <rosparam file="$(find laikago_gazebo)/config/robot_control.yaml" command="load"/>
