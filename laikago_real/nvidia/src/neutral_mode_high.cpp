@@ -51,8 +51,8 @@ int main(int argc, char *argv[])
         SendHighROS.forwardSpeed = 0.0f;
 
         SendHighROS.mode = 0;
-        SendHighROS.roll  = 0;
-        SendHighROS.pitch = 0;
+        SendHighROS.roll  = 0.0f;
+        SendHighROS.pitch = 0.0f;
         SendHighROS.yaw = 0;
 
         memcpy(&SendHighLCM, &SendHighROS, sizeof(HighCmd));

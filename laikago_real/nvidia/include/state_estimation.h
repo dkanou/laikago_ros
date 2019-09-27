@@ -51,7 +51,12 @@ public:
 
     void update(const laikago_msgs::HighState &state);
 
-    void getBodyState() const {
+    Eigen::Vector3f getBodyPosition() const {
+        return _xhat.block(0, 0, 3, 1);
+    }
+
+    Eigen::Vector3f getBodyVelocity() const {
+        return _xhat.block(3, 0, 3, 1);
     }
 
 private:
@@ -103,8 +108,8 @@ void BodyPoseEstimator::update(const laikago_msgs::HighState &state) {
     Eigen::Vector3f a;
     a << state.imu.acceleration.elems[0],
             state.imu.acceleration.elems[1],
-            state.imu.acceleration.elems[2]; // includes g
-    a = Rbod * a;
+            state.imu.acceleration.elems[2]; // with gravity bias
+    a = Rbod * a + Eigen::Vector3f{0.0f, 0.0f, -9.81f};
     Eigen::Vector4f pzs = Eigen::Vector4f::Zero();
     Eigen::Vector4f trusts = Eigen::Vector4f::Zero();
     Eigen::Vector3f p0, v0;
@@ -172,9 +177,6 @@ void BodyPoseEstimator::update(const laikago_msgs::HighState &state) {
         _P.block(2, 0, 16, 2).setZero();
         _P.block(0, 0, 2, 2) /= float(10);
     }
-
-    std::cout << "body position and velocity: \n";
-    std::cout << _xhat.block(0, 0, 6, 1).transpose() << std::endl;
 
 }
 

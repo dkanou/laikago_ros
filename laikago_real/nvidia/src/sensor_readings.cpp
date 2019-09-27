@@ -6,6 +6,7 @@
 #include <pthread.h>
 #include <ros/ros.h>
 #include "laikago_sdk/laikago_sdk.hpp"
+#include "sensor_msgs/JointState.h"
 #include "state_estimation.h"
 
 using namespace laikago;
@@ -42,9 +43,10 @@ int main(int argc, char *argv[]) {
 
     // init control state
     robot_hal::BodyPoseEstimator bodyPoseEstimator;
+    ros::Publisher body_world_pub = n.advertise<sensor_msgs::JointState>("body_world", 100);
 
     while (ros::ok()) {
-        motiontime = motiontime + 2;
+        motiontime++;
         roslcm.Get(RecvHighLCM);
         memcpy(&RecvHighROS, &RecvHighLCM, sizeof(HighState));
 
@@ -57,9 +59,24 @@ int main(int argc, char *argv[]) {
 
         bodyPoseEstimator.update(RecvHighROS);
 
+        Eigen::Vector3f body_position = bodyPoseEstimator.getBodyPosition();
+        Eigen::Vector3f body_velocity = bodyPoseEstimator.getBodyVelocity();
+
+        // publish message
+        sensor_msgs::JointState body_world_msg;
+        body_world_msg.header.stamp = ros::Time::now();
+        body_world_msg.name = {"x", "y", "z"};
+        for (int i = 0; i < 3; i++) {
+            body_world_msg.position.push_back(body_position[i]);
+            body_world_msg.velocity.push_back(body_velocity[i]);
+            body_world_msg.effort.push_back(RecvHighROS.imu.acceleration.elems[i]);
+        }
+        body_world_pub.publish(body_world_msg);
+
         // pass command
-        memcpy(&SendHighLCM, &SendHighROS, sizeof(HighCmd));
-        roslcm.Send(SendHighLCM);
+//        memcpy(&SendHighLCM, &SendHighROS, sizeof(HighCmd));
+//        roslcm.Send(SendHighLCM);
+
         ros::spinOnce();
         loop_rate.sleep();
     }
