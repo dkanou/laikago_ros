@@ -16,25 +16,28 @@ catkin_package(
 
 include_directories(
     include
-    /home/xda/CLionProjects/laikago_sdk_pc/include
+    $ENV{Laikago_SDK}/include
     ${Boost_INCLUDE_DIR}
     ${catkin_INCLUDE_DIRS}
 )
 
-add_compile_options(-std=c++11)
+add_compile_options(-std=c++14)
 
-link_directories(/home/xda/CLionProjects/laikago_sdk_pc/lib)
+link_directories($ENV{Laikago_SDK}/lib)
 set(EXTRA_LIBS liblaikago_comm.so lcm)
 set(CMAKE_CXX_FLAGS "-no-pie")
 
-add_executable(position_lcm src/position_mode.cpp)
+add_executable(position_lcm example/position_mode.cpp)
 target_link_libraries(position_lcm ${EXTRA_LIBS} ${catkin_LIBRARIES})
 
-add_executable(velocity_lcm src/velocity_mode.cpp)
+add_executable(velocity_lcm example/velocity_mode.cpp)
 target_link_libraries(velocity_lcm ${EXTRA_LIBS} ${catkin_LIBRARIES})
 
-add_executable(torque_lcm src/torque_mode.cpp)
+add_executable(torque_lcm example/torque_mode.cpp)
 target_link_libraries(torque_lcm ${EXTRA_LIBS} ${catkin_LIBRARIES})
 
-add_executable(walk_lcm src/walk_mode.cpp)
+add_executable(walk_lcm example/walk_mode.cpp)
 target_link_libraries(walk_lcm ${EXTRA_LIBS} ${catkin_LIBRARIES})
+
+# nvidia
+add_subdirectory(nvidia)
