@@ -1,10 +1,12 @@
-#include <ros/ros.h>
-#include <pthread.h>
 #include <boost/thread.hpp>
 #include <boost/thread/mutex.hpp>
+#include <Eigen/Geometry>
 #include <laikago_msgs/HighCmd.h>
 #include <laikago_msgs/HighState.h>
+#include <pthread.h>
+#include <ros/ros.h>
 #include "laikago_sdk/laikago_sdk.hpp"
+#include "state_estimation.h"
 
 using namespace laikago;
 
@@ -18,9 +20,8 @@ Control control(HIGHLEVEL);
 LCM roslcm;
 boost::mutex mutex;
 
-void* update_loop(void* data)
-{
-    while(ros::ok){
+void *update_loop(void *data) {
+    while (ros::ok) {
         boost::mutex::scoped_lock lock(mutex);
         roslcm.Recv();
         lock.unlock();
@@ -28,8 +29,7 @@ void* update_loop(void* data)
     }
 }
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     std::cout << "WARNING: Control level is set to HIGH-level." << std::endl;
 
     ros::init(argc, argv, "sensor_readings");
@@ -40,21 +40,24 @@ int main(int argc, char *argv[])
     pthread_t tid;
     pthread_create(&tid, NULL, update_loop, NULL);
 
-    while (ros::ok()){
-        motiontime = motiontime+2;
+    // init control state
+    robot_hal::BodyPoseEstimator bodyPoseEstimator;
+
+    while (ros::ok()) {
+        motiontime = motiontime + 2;
         roslcm.Get(RecvHighLCM);
         memcpy(&RecvHighROS, &RecvHighLCM, sizeof(HighState));
 
-        SendHighROS.forwardSpeed = 0.0f;
-        SendHighROS.sideSpeed = 0.0f;
-        SendHighROS.rotateSpeed = 0.0f;
-        SendHighROS.forwardSpeed = 0.0f;
+        // parse the state
+        Eigen::Quaternionf imu_quat(RecvHighROS.imu.quaternion.elems[0],
+                                    RecvHighROS.imu.quaternion.elems[1],
+                                    RecvHighROS.imu.quaternion.elems[2],
+                                    RecvHighROS.imu.quaternion.elems[3]);
+        Eigen::Matrix3f mat_R = imu_quat.toRotationMatrix();
 
-        SendHighROS.mode = 0;
-        SendHighROS.roll  = 0;
-        SendHighROS.pitch = 0;
-        SendHighROS.yaw = 0;
+        bodyPoseEstimator.update(RecvHighROS);
 
+        // pass command
         memcpy(&SendHighLCM, &SendHighROS, sizeof(HighCmd));
         roslcm.Send(SendHighLCM);
         ros::spinOnce();
