@@ -237,7 +237,7 @@ int main(int argc, char **argv)
         control logic
         */
 //        pauseGazebo.call(emptySrv);
-        ROS_INFO("");
+//        ROS_INFO("");
 //        std::cout << ros::Time::now().nsec << std::endl;
 
         lowState_pub.publish(lowState);
