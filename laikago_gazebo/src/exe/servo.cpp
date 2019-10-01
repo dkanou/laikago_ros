@@ -13,6 +13,7 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include <geometry_msgs/WrenchStamped.h>
 #include <sensor_msgs/Imu.h>
 #include <std_msgs/Bool.h>
+#include <std_srvs/Empty.h>
 #include <vector>
 #include <string.h>
 #include <math.h>
@@ -53,6 +54,12 @@ public:
         lowState.imu.quaternion[1] = msg.orientation.x;
         lowState.imu.quaternion[2] = msg.orientation.y;
         lowState.imu.quaternion[3] = msg.orientation.z;
+        lowState.imu.gyroscope[0] = msg.angular_velocity.x;
+        lowState.imu.gyroscope[1] = msg.angular_velocity.y;
+        lowState.imu.gyroscope[2] = msg.angular_velocity.z;
+        lowState.imu.acceleration[0] = msg.linear_acceleration.x;
+        lowState.imu.acceleration[1] = msg.linear_acceleration.y;
+        lowState.imu.acceleration[2] = msg.linear_acceleration.z;
     }
 
     void FRhipCallback(const laikago_msgs::MotorState& msg)
@@ -203,7 +210,7 @@ int main(int argc, char **argv)
 
     ros::NodeHandle n;
     ros::Publisher lowState_pub; //for rviz visualization
-    // ros::Rate loop_rate(1000);
+     ros::Rate loop_rate(500);
     // the following nodes have been initialized by "gazebo.launch"
     lowState_pub = n.advertise<laikago_msgs::LowState>("/laikago_gazebo/lowState/state", 1);
     servo_pub[0] = n.advertise<laikago_msgs::MotorCmd>("/laikago_gazebo/FR_hip_controller/command", 1);
@@ -221,12 +228,25 @@ int main(int argc, char **argv)
 
     motion_init();
 
+    ros::ServiceClient pauseGazebo = n.serviceClient<std_srvs::Empty>("/gazebo/pause_physics");
+    ros::ServiceClient unpauseGazebo = n.serviceClient<std_srvs::Empty>("/gazebo/unpause_physics");
+    std_srvs::Empty emptySrv;
+
     while (ros::ok()){
         /*
         control logic
         */
+//        pauseGazebo.call(emptySrv);
+        ROS_INFO("");
+//        std::cout << ros::Time::now().nsec << std::endl;
+
         lowState_pub.publish(lowState);
-        sendServoCmd();
+        for(int m=0; m<12; m++){
+            servo_pub[m].publish(lowCmd.motorCmd[m]);
+        }
+        ros::spinOnce();
+//        unpauseGazebo.call(emptySrv);
+        loop_rate.sleep();
     }
     return 0;
 }
