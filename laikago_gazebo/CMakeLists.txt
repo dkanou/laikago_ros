@@ -17,8 +17,8 @@ find_package(catkin REQUIRED COMPONENTS
 find_package(gazebo REQUIRED)
 
 catkin_package(
-    CATKIN_DEPENDS 
-    laikago_msgs 
+    CATKIN_DEPENDS
+    laikago_msgs
 )
 
 include_directories(
@@ -26,6 +26,7 @@ include_directories(
     ${Boost_INCLUDE_DIR}
     ${catkin_INCLUDE_DIRS}
     ${GAZEBO_INCLUDE_DIRS}
+    src
 )
 
 link_directories(${GAZEBO_LIBRARY_DIRS})
@@ -33,7 +34,8 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GAZEBO_CXX_FLAGS}")
 
 # Declare a C++ library
 add_library(${PROJECT_NAME}
-    src/body.cpp 
+    src/body.cpp
+    src/kinematics.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

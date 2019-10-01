@@ -4,8 +4,8 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 ************************************************************************/
 
 #include "ros/ros.h"
-#include <stdio.h>
-#include <stdlib.h>
+#include <cstdio>
+#include <cstdlib>
 #include "laikago_msgs/LowCmd.h"
 #include "laikago_msgs/LowState.h"
 #include "laikago_msgs/MotorCmd.h"
@@ -15,10 +15,11 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include <std_msgs/Bool.h>
 #include <std_srvs/Empty.h>
 #include <vector>
-#include <string.h>
-#include <math.h>
+#include <cstring>
+#include <cmath>
 #include <nav_msgs/Odometry.h>
-#include "../body.h"
+#include "body.h"
+#include "kinematics.h"
 
 using namespace std;
 using namespace laikago_model;
@@ -231,21 +232,34 @@ int main(int argc, char **argv)
     ros::ServiceClient pauseGazebo = n.serviceClient<std_srvs::Empty>("/gazebo/pause_physics");
     ros::ServiceClient unpauseGazebo = n.serviceClient<std_srvs::Empty>("/gazebo/unpause_physics");
     std_srvs::Empty emptySrv;
+    pauseGazebo.call(emptySrv);
+    unpauseGazebo.call(emptySrv);
+
+    double begin_time = ros::Time::now().toSec();
+    laikago::Kinematics kinematics;
 
     while (ros::ok()){
         /*
         control logic
         */
-//        pauseGazebo.call(emptySrv);
-//        ROS_INFO("");
-//        std::cout << ros::Time::now().nsec << std::endl;
 
+        // Control algorithm
+        double sim_time = ros::Time::now().toSec() - begin_time;
+//        lowCmd.motorCmd[1].position = 0.4*sin(2 * M_PI * sim_time);
+        lowCmd.motorCmd[1].position = -0.4;
+        kinematics.readSensors();
+
+
+
+
+
+        // Publish states and cmd
         lowState_pub.publish(lowState);
         for(int m=0; m<12; m++){
             servo_pub[m].publish(lowCmd.motorCmd[m]);
         }
         ros::spinOnce();
-//        unpauseGazebo.call(emptySrv);
+
         loop_rate.sleep();
     }
     return 0;
