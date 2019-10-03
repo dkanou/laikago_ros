@@ -14,7 +14,7 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include <std_srvs/Empty.h>
 #include <vector>
 #include "body.h"
-#include "kinematics.h"
+#include "controller.h"
 #include "laikago_msgs/LowCmd.h"
 #include "laikago_msgs/LowState.h"
 #include "laikago_msgs/MotorCmd.h"
@@ -246,6 +246,7 @@ int main(int argc, char **argv)
 
     double begin_time = ros::Time::now().toSec();
     Kinematics kinematics;
+    Controller controller;
 
     while (ros::ok()){
         /*
@@ -254,15 +255,10 @@ int main(int argc, char **argv)
 
         // Control algorithm
         double sim_time = ros::Time::now().toSec() - begin_time;
-//        lowCmd.motorCmd[1].position = 0.4*sin(2 * M_PI * sim_time);
-        lowCmd.motorCmd[1].position = -0.4;
-        kinematics.readSensors();
+        controller.setTime(sim_time);
+        controller.sendCommand();
 
-
-
-
-
-        // Publish states and cmd
+        // Publish state and cmd
         lowState_pub.publish(lowState);
         for(int m=0; m<12; m++){
             servo_pub[m].publish(lowCmd.motorCmd[m]);

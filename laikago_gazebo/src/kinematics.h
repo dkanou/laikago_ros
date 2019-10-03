@@ -4,7 +4,6 @@
 #include <casadi/casadi.hpp>
 #include <Eigen/Geometry>
 #include "body.h"
-#include "ros/ros.h"
 
 using namespace casadi;
 using laikago_model::lowState;
@@ -14,7 +13,7 @@ public:
     Kinematics() {
         std::string gen_path{std::getenv("MATLAB_GEN")};
         f_kinBodyFeet_ = external("kinBodyFeet", gen_path.append("/kinBodyFeet.so"));
-        updateEigenState();
+        update();
     }
 
     void updateEigenState() {
@@ -40,17 +39,20 @@ public:
 
         p_feet_ = temp_p_feet.cast<float>();
         J_feet_ = temp_J_feet.cast<float>();
-
-        std::cout << feet_dict["p_feet"] << std::endl;
-        std::cout << p_feet_.transpose() << std::endl;
-        std::cout << feet_dict["J_feet"] << std::endl;
-        std::cout << J_feet_ << std::endl;
     }
 
-    void readSensors() {
+    void update() {
         updateEigenState();
         updateKinematics();
     }
+
+    void printFeet() {
+        update();
+        std::cout << "p_feet:\n" << p_feet_.transpose() << std::endl;
+        std::cout << "J_feet:\n" << J_feet_ << std::endl;
+    }
+
+    friend class Controller;
 
     static void __attribute__ ((used)) printState() {
         std::cout << lowState << std::endl;
