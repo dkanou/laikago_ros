@@ -39,7 +39,9 @@ add_library(${PROJECT_NAME}
 )
 
 target_link_libraries(${PROJECT_NAME}
-  ${catkin_LIBRARIES} ${EXTRA_LIBS}
+    ${catkin_LIBRARIES}
+    ${EXTRA_LIBS}
+    casadi
 )
 
 add_library(LaikagoFootContactPlugin SHARED plugin/foot_contact_plugin.cc)

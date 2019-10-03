@@ -3,23 +3,25 @@ Copyright (c) 2018-2019, Unitree Robotics.Co.Ltd. All rights reserved.
 Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 ************************************************************************/
 
-#include "ros/ros.h"
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
-#include "laikago_msgs/LowCmd.h"
-#include "laikago_msgs/LowState.h"
-#include "laikago_msgs/MotorCmd.h"
-#include "laikago_msgs/MotorState.h"
+#include <cstring>
 #include <geometry_msgs/WrenchStamped.h>
+#include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Imu.h>
 #include <std_msgs/Bool.h>
 #include <std_srvs/Empty.h>
 #include <vector>
-#include <cstring>
-#include <cmath>
-#include <nav_msgs/Odometry.h>
 #include "body.h"
 #include "kinematics.h"
+#include "laikago_msgs/LowCmd.h"
+#include "laikago_msgs/LowState.h"
+#include "laikago_msgs/MotorCmd.h"
+#include "laikago_msgs/MotorState.h"
+#include "ros/ros.h"
+#include "tf/LinearMath/Matrix3x3.h"
+#include "tf/transform_datatypes.h"
 
 using namespace std;
 using namespace laikago_model;
@@ -61,6 +63,13 @@ public:
         lowState.imu.acceleration[0] = msg.linear_acceleration.x;
         lowState.imu.acceleration[1] = msg.linear_acceleration.y;
         lowState.imu.acceleration[2] = msg.linear_acceleration.z;
+        tf::Quaternion quaternion;
+        tf::quaternionMsgToTF(msg.orientation, quaternion);
+        double roll, pitch, yaw;
+        tf::Matrix3x3(quaternion).getRPY(roll, pitch, yaw);
+        lowState.imu.rpy[0] = roll;
+        lowState.imu.rpy[1] = pitch;
+        lowState.imu.rpy[2] = yaw;
     }
 
     void FRhipCallback(const laikago_msgs::MotorState& msg)
@@ -236,7 +245,7 @@ int main(int argc, char **argv)
     unpauseGazebo.call(emptySrv);
 
     double begin_time = ros::Time::now().toSec();
-    laikago::Kinematics kinematics;
+    Kinematics kinematics;
 
     while (ros::ok()){
         /*

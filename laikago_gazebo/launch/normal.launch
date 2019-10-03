@@ -17,9 +17,9 @@
         <arg name="headless" value="$(arg headless)"/>
     </include>
 
-    <include file="$(find laikago_gazebo)/launch/robot.launch">
+    <!-- <include file="$(find laikago_gazebo)/launch/robot.launch">
         <arg name="user_debug" value="$(arg user_debug)"/>
-    </include>
+    </include> -->
 
     <!-- <node pkg="laikago_gazebo" type="servo" name="servo" required="true" output="screen"/> -->
 
