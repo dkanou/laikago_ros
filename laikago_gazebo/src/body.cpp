@@ -10,6 +10,7 @@ namespace laikago_model {
 ros::Publisher servo_pub[12];
 laikago_msgs::LowCmd lowCmd;
 laikago_msgs::LowState lowState;
+laikago_msgs::HighState highState;
 
 // These parameters are only for reference.
 // Actual patameters need to be debugged if you want to run on real robot.

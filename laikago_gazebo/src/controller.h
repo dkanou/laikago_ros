@@ -14,34 +14,45 @@ public:
     void sendCommand() {
         kin_.update();
         setMotorZero();
-        Eigen::Vector4f hip_gravity;
-        hip_gravity << -0.86, 0.86, -0.86, 0.86;
+        Eigen::Matrix<float, 12, 1> p_feet_desired;
+
+        p_feet_desired.segment(0, 3) << 0.21, -0.14, -0.4;
+        p_feet_desired.segment(3, 3) << 0.21, 0.14, -0.4;
+        p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.4;
+        p_feet_desired.segment(9, 3) << -0.22, 0.14, -0.4;
+
+        Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - kin_.p_feet_;
+        Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
+        feet_force = 2000.0 * p_feet_error;
+
+        Eigen::Matrix<float, 12, 1> motor_torque = kin_.J_feet_.transpose() * feet_force;
+        Eigen::Vector4f torque_hip_gravity;
+        torque_hip_gravity << -0.86, 0.86, -0.86, 0.86;
+        for (int i = 0; i < 4; i++) {
+            motor_torque[i * 3 + 0] += torque_hip_gravity[i];
+        }
+        setTorque(motor_torque);
+
+    }
+
+    void sendCommandPD() {
+        kin_.update();
+        setMotorZero();
+        Eigen::Vector4f torque_hip_gravity;
+        torque_hip_gravity << -0.86, 0.86, -0.86, 0.86;
         Eigen::Vector4f pos_hip;
         pos_hip << 0.0, 0.0, 0.0, 0.0;
         Eigen::Vector4f pos_thigh;
         pos_thigh << 0.67, 0.67, 0.67, 0.67;
         Eigen::Vector4f pos_calf;
         pos_calf << -1.3, -1.3, -1.3, -1.3;
-
+        Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
         for (int i = 0; i < 4; i++) {
-            lowCmd.motorCmd[i * 3 + 0].torque = hip_gravity[i] + 70 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
-            lowCmd.motorCmd[i * 3 + 1].torque = 180 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
-            lowCmd.motorCmd[i * 3 + 2].torque = 300 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
+            motor_torque[i * 3 + 0] = torque_hip_gravity[i] + 70 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
+            motor_torque[i * 3 + 1] = 180 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
+            motor_torque[i * 3 + 2] = 300 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
         }
-        for (int i = 0; i < 4; i++) {
-            lowCmd.motorCmd[i * 3 + 0].position = pos_hip[i];
-            lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0; // 70
-            lowCmd.motorCmd[i * 3 + 0].velocity = 0;
-            lowCmd.motorCmd[i * 3 + 0].velocityStiffness = 3; // 3
-            lowCmd.motorCmd[i * 3 + 1].position = pos_thigh[i];
-            lowCmd.motorCmd[i * 3 + 1].positionStiffness = 0; // 180
-            lowCmd.motorCmd[i * 3 + 1].velocity = 0;
-            lowCmd.motorCmd[i * 3 + 1].velocityStiffness = 4; // 8
-            lowCmd.motorCmd[i * 3 + 2].position = pos_calf[i];
-            lowCmd.motorCmd[i * 3 + 2].positionStiffness = 0; // 300
-            lowCmd.motorCmd[i * 3 + 2].velocity = 0;
-            lowCmd.motorCmd[i * 3 + 2].velocityStiffness = 2; // 15
-        }
+        setTorque(motor_torque);
     }
 
     void setTime(const double &time) {
@@ -72,8 +83,31 @@ public:
     }
 
 private:
+
+    static void setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
+        for (int i = 0; i < 12; i++) {
+            lowCmd.motorCmd[i].torque = motor_torque[i];
+        }
+        for (int i = 0; i < 4; i++) {
+            lowCmd.motorCmd[i * 3 + 0].position = PosStopF;
+            lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0; // 70
+            lowCmd.motorCmd[i * 3 + 0].velocity = 0;
+            lowCmd.motorCmd[i * 3 + 0].velocityStiffness = 3; // 3
+            lowCmd.motorCmd[i * 3 + 1].position = PosStopF;
+            lowCmd.motorCmd[i * 3 + 1].positionStiffness = 0; // 180
+            lowCmd.motorCmd[i * 3 + 1].velocity = 0;
+            lowCmd.motorCmd[i * 3 + 1].velocityStiffness = 4; // 8
+            lowCmd.motorCmd[i * 3 + 2].position = PosStopF;
+            lowCmd.motorCmd[i * 3 + 2].positionStiffness = 0; // 300
+            lowCmd.motorCmd[i * 3 + 2].velocity = 0;
+            lowCmd.motorCmd[i * 3 + 2].velocityStiffness = 2; // 15
+        }
+    }
+
     double time_{0};
     Kinematics kin_;
+    int is_left_[4]{-1, 1, -1, 1};
+    int is_front[4]{1, 1, -1, -1};
 };
 
 

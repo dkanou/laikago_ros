@@ -16,9 +16,9 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 namespace laikago_model {
 
 extern ros::Publisher servo_pub[12];
-extern ros::Publisher highState_pub;
 extern laikago_msgs::LowCmd lowCmd;
 extern laikago_msgs::LowState lowState;
+extern laikago_msgs::HighState highState;
 
 void stand();
 void motion_init();

@@ -86,6 +86,7 @@ p_thigh = containers.Map;
 p_calf = containers.Map;
 p_foot = containers.Map;
 p_feet = [];
+R_feet = [];
 for n = 1:4
     leg_str = legs{n};
     leg_q = q_leg(leg_str);
@@ -94,12 +95,13 @@ for n = 1:4
     p_calf(leg_str) = p_thigh(leg_str) + rot_x(leg_q(1))*rot_y(leg_q(2))*[0, 0, -thigh_length]';
     p_foot(leg_str) = p_calf(leg_str) + rot_x(leg_q(1))*rot_y(leg_q(2))*rot_y(leg_q(3))*[0, 0, -calf_length]';
     p_feet = [p_feet; p_foot(leg_str)];
+    R_feet = [R_feet; rot_x(leg_q(1))*rot_y(leg_q(2))*rot_y(leg_q(3))];
 end
 
 J_feet = jacobian(p_feet, q_b);
 J_feet = simplify(J_feet);
 
-matlabFunction(p_feet, J_feet,'Outputs',{'p_feet', 'J_feet'},...
+matlabFunction(p_feet, J_feet, R_feet,'Outputs',{'p_feet', 'J_feet', 'R_feet'},...
     'File', [file_folder, '/gen/kinBodyFeet'],...
     'Vars', {q_b});
 save([file_folder, '/gen/kinBodyFeet'], 'legs');

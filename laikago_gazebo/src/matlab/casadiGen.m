@@ -2,10 +2,10 @@ import casadi.*
 
 q = SX.sym('q', 12, 1);
 
-[p_feet,J_feet] = kinBodyFeet(q);
+[p_feet,J_feet, R_feet] = kinBodyFeet(q);
 
-f_kinBodyFeet = Function('kinBodyFeet', {q}, {p_feet, J_feet},...
-    {'q'},{'p_feet','J_feet'});
+f_kinBodyFeet = Function('kinBodyFeet', {q}, {p_feet, J_feet, R_feet},...
+    {'q'},{'p_feet','J_feet', 'R_feet'});
 
 file_folder = getFolderPath();
             cd([file_folder, '/gen']);
