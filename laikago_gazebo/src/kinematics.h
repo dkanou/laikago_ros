@@ -48,10 +48,14 @@ public:
         p_feet_ = temp_p_feet.cast<float>();
         J_feet_ = temp_J_feet.cast<float>();
         R_feet_ = temp_R_feet.cast<float>();
+        dp_feet_ = J_feet_ * dq_motor_;
         for (int i = 0; i < 4; i++) {
             highState.footPosition2Body[i].x = p_feet_[i * 3 + 0];
             highState.footPosition2Body[i].y = p_feet_[i * 3 + 1];
             highState.footPosition2Body[i].z = p_feet_[i * 3 + 2];
+            highState.footSpeed2Body[i].x = dp_feet_[i * 3 + 0];
+            highState.footSpeed2Body[i].y = dp_feet_[i * 3 + 1];
+            highState.footSpeed2Body[i].z = dp_feet_[i * 3 + 2];
         }
     }
 
@@ -87,6 +91,7 @@ private:
     Eigen::Matrix<float, 12, 1> p_feet_;
     Eigen::Matrix<float, 12, 12> J_feet_;
     Eigen::Matrix<float, 12, 3> R_feet_;
+    Eigen::Matrix<float, 12, 1> dp_feet_;
     Function f_kinBodyFeet_;
 };
 

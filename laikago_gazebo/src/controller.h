@@ -5,6 +5,7 @@
 #include <Eigen/Dense>
 #include "body.h"
 #include "kinematics.h"
+#include "body_estimation.h"
 
 using namespace casadi;
 using laikago_model::lowCmd;
@@ -13,13 +14,14 @@ class Controller {
 public:
     void sendCommand() {
         kin_.update();
+        bodyPoseEstimator_.update();
         setMotorZero();
         Eigen::Matrix<float, 12, 1> p_feet_desired;
 
         p_feet_desired.segment(0, 3) << 0.21, -0.14, -0.4;
         p_feet_desired.segment(3, 3) << 0.21, 0.14, -0.4;
-        p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.4;
-        p_feet_desired.segment(9, 3) << -0.22, 0.14, -0.4;
+        p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.34;
+        p_feet_desired.segment(9, 3) << -0.22, 0.14, -0.34;
 
         Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - kin_.p_feet_;
         Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
@@ -104,10 +106,9 @@ private:
         }
     }
 
-    double time_{0};
+    float time_{0};
     Kinematics kin_;
-    int is_left_[4]{-1, 1, -1, 1};
-    int is_front[4]{1, 1, -1, -1};
+    BodyPoseEstimator bodyPoseEstimator_;
 };
 
 

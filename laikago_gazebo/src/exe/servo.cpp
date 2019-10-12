@@ -220,27 +220,27 @@ int main(int argc, char **argv) {
     servo_pub[10] = n.advertise<laikago_msgs::MotorCmd>("/laikago_gazebo/RL_thigh_controller/command", 1);
     servo_pub[11] = n.advertise<laikago_msgs::MotorCmd>("/laikago_gazebo/RL_calf_controller/command", 1);
 
-    motion_init();
-
     ros::ServiceClient pauseGazebo = n.serviceClient<std_srvs::Empty>("/gazebo/pause_physics");
     ros::ServiceClient unpauseGazebo = n.serviceClient<std_srvs::Empty>("/gazebo/unpause_physics");
+    ros::ServiceClient resetGazebo = n.serviceClient<std_srvs::Empty>("/gazebo/reset_world");
     std_srvs::Empty emptySrv;
-    pauseGazebo.call(emptySrv);
-    unpauseGazebo.call(emptySrv);
 
-    double begin_time = ros::Time::now().toSec();
-    Kinematics kinematics;
+    unpauseGazebo.call(emptySrv);
+    motion_init();
+    resetGazebo.call(emptySrv);
+
     Controller controller;
+    double begin_time = ros::Time::now().toSec();
 
     while (ros::ok()) {
         /*
         control logic
         */
+        // pause simulation to run controller
         pauseGazebo.call(emptySrv);
 
         // Control algorithm
         double sim_time = ros::Time::now().toSec() - begin_time;
-        std::cout << sim_time << std::endl;
         controller.setTime(sim_time);
         controller.sendCommand();
 
@@ -250,6 +250,8 @@ int main(int argc, char **argv) {
         for (int m = 0; m < 12; m++) {
             servo_pub[m].publish(lowCmd.motorCmd[m]);
         }
+
+        // finish one iteration
         ros::spinOnce();
         unpauseGazebo.call(emptySrv);
         loop_rate.sleep();
