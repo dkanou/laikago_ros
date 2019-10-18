@@ -19,6 +19,7 @@ add_message_files(
   LowState.msg
   HighCmd.msg
   HighState.msg
+  WorldState.msg
 )
 
 generate_messages(

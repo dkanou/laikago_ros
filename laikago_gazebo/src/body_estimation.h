@@ -2,13 +2,16 @@
 #define CATKIN_WS_BODY_ESTIMATION_H
 
 #include "body.h"
+#include "laikago_msgs/WorldState.h"
 
 using laikago_model::lowState;
 using laikago_model::highState;
 
-class BodyPoseEstimator {
+class BodyPoseEstimator
+{
 public:
-    BodyPoseEstimator() {
+    BodyPoseEstimator()
+    {
         _xhat.setZero();
         _xhat(2) = 1; //height initialization
         _ps.setZero();
@@ -46,9 +49,19 @@ public:
                 (dt_ * 9.8f / 20.f) * Eigen::Matrix<float, 3, 3>::Identity();
         _Q0.block(6, 6, 12, 12) = dt_ * Eigen::Matrix<float, 12, 12>::Identity();
         _R0.setIdentity();
+
+        ros::NodeHandle n;
+        worldState_pub_ = n.advertise<laikago_msgs::WorldState>("/laikago_gazebo/worldState/state", 1);
     }
 
     void update();
+
+    void publish()
+    {
+        worldState_pub_.publish(worldState_);
+    };
+
+    laikago_msgs::WorldState worldState_;
 
 private:
     const float dt_{0.002}; //todo(dda): need to agree with the sample rate
@@ -62,10 +75,12 @@ private:
     Eigen::Matrix<float, 18, 3> _B;
     Eigen::Matrix<float, 28, 18> _C;
     const float low_{10};
-    const float high_{40};
+    const float high_{20};
+    ros::Publisher worldState_pub_;
 };
 
-void BodyPoseEstimator::update() {
+void BodyPoseEstimator::update()
+{
 
     float process_noise_pimu = 0.02;
     float process_noise_vimu = 0.02;
@@ -100,15 +115,15 @@ void BodyPoseEstimator::update() {
     a << lowState.imu.acceleration[0],
             lowState.imu.acceleration[1],
             lowState.imu.acceleration[2];
-    a = Rbod * a;
-    a[2] = a[2] - 9.81f; // compensate for gravity
+    a = Rbod * a + Eigen::Vector3f{0.0f, 0.0f, -9.81f};
     Eigen::Vector4f pzs = Eigen::Vector4f::Zero();
     Eigen::Vector4f trusts = Eigen::Vector4f::Zero();
     Eigen::Vector3f p0, v0;
     p0 << _xhat[0], _xhat[1], _xhat[2];
     v0 << _xhat[3], _xhat[4], _xhat[5];
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++)
+    {
         int i1 = 3 * i;
         Eigen::Vector3f p_rel;
         p_rel << highState.footPosition2Body[i].x, highState.footPosition2Body[i].y, highState.footPosition2Body[i].z;
@@ -160,10 +175,29 @@ void BodyPoseEstimator::update() {
     Eigen::Matrix<float, 18, 18> Pt = _P.transpose();
     _P = (_P + Pt) / float(2);
 
-    if (_P.block(0, 0, 2, 2).determinant() > float(0.000001)) {
+    if (_P.block(0, 0, 2, 2).determinant() > float(0.000001))
+    {
         _P.block(0, 2, 2, 16).setZero();
         _P.block(2, 0, 16, 2).setZero();
         _P.block(0, 0, 2, 2) /= float(10);
+    }
+
+    worldState_.bodyPosition.x = _xhat[0];
+    worldState_.bodyPosition.y = _xhat[1];
+    worldState_.bodyPosition.z = _xhat[2];
+    worldState_.bodySpeed.x = _xhat[3];
+    worldState_.bodySpeed.y = _xhat[4];
+    worldState_.bodySpeed.z = _xhat[5];
+
+    for (int i = 0; i < 4; i++)
+    {
+        worldState_.footPosition[i].x = _xhat[i * 3 + 6];
+        worldState_.footPosition[i].y = _xhat[i * 3 + 7];
+        worldState_.footPosition[i].z = _xhat[i * 3 + 8];
+        //todo: include centripetal velocity
+        worldState_.footSpeed[i].x = worldState_.bodySpeed.x + highState.footSpeed2Body[i].x;
+        worldState_.footSpeed[i].y = worldState_.bodySpeed.y + highState.footSpeed2Body[i].y;
+        worldState_.footSpeed[i].z = worldState_.bodySpeed.z + highState.footSpeed2Body[i].z;
     }
 
     highState.forwardPosition.x = _xhat[0];
