@@ -10,14 +10,12 @@
 using namespace casadi;
 using laikago_model::lowCmd;
 
-class Controller
-{
+class Controller {
 public:
-    void sendCommand()
-    {
+    void sendCommand() {
         kin_.update();
-        bodyPoseEstimator_.update();
-        bodyPoseEstimator_.publish();
+        est_.update();
+        est_.publish();
         setMotorZero();
         Eigen::Matrix<float, 12, 1> p_feet_desired;
 
@@ -33,16 +31,65 @@ public:
         Eigen::Matrix<float, 12, 1> motor_torque = kin_.J_feet_.transpose() * feet_force;
         Eigen::Vector4f torque_hip_gravity;
         torque_hip_gravity << -0.86, 0.86, -0.86, 0.86;
-        for (int i = 0; i < 4; i++)
-        {
+        for (int i = 0; i < 4; i++) {
             motor_torque[i * 3 + 0] += torque_hip_gravity[i];
         }
-        setTorque(motor_torque);
 
+        // matrix of feet force to acceleration
+        Eigen::Matrix<float, 3, 12> Mat_lin;
+        Eigen::Matrix<float, 3, 12> Mat_rot;
+        for (int i = 0; i < 4; i++) {
+            Mat_lin.block(0, 3 * i, 3, 3) = Eigen::Matrix3f::Identity();
+            Eigen::Vector3f foot_world = kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3);
+            Mat_rot.block(0, 3 * i, 3, 3) = conjMatrix(foot_world);
+        }
+        Eigen::Matrix<float, 12, 12> Mat_I = Eigen::Matrix<float, 12, 12>::Identity();
+
+        // acceleration
+        float kp_imu = 10000;
+        float kd_imu = 1;
+        Eigen::Matrix<float, 6, 1> desired_imu;
+        desired_imu << 0, 0, 0.4, 0, 0, 0;
+        Eigen::Matrix<float, 6, 1> pos_imu;
+        pos_imu << est_.worldState_.bodyPosition.x * 1,
+                est_.worldState_.bodyPosition.y * 1,
+                est_.worldState_.bodyPosition.z,
+                kin_.q_imu_;
+        Eigen::Matrix<float, 6, 1> vel_imu;
+        vel_imu << est_.worldState_.bodySpeed.x,
+                est_.worldState_.bodySpeed.y,
+                est_.worldState_.bodySpeed.z,
+                kin_.dq_imu_;
+        Eigen::Matrix<float, 6, 1> acc_imu;
+        acc_imu = kp_imu * (desired_imu - pos_imu) - kd_imu * vel_imu;
+        Eigen::Matrix<float, 12, 1> acc_zero;
+        acc_zero = Eigen::Matrix<float, 12, 1>::Zero();
+
+        // linear optimization
+        Eigen::Matrix<float, 18, 12> opt_A;
+        opt_A << Mat_lin, Mat_rot, Mat_I;
+        Eigen::Matrix<float, 18, 1> opt_b;
+        opt_b << acc_imu, acc_zero;
+        Eigen::Matrix<float, 12, 1> grf;
+        grf = opt_A.colPivHouseholderQr().solve(opt_b);
+
+        // convert to torque
+        Eigen::Matrix<float, 12, 1> feet_force2 = Eigen::Matrix<float, 12, 1>::Zero();
+        for (int i = 0; i < 4; i++) {
+            feet_force2.segment(3 * i, 3) = kin_.R_imu_.transpose() * -grf.segment(3 * i, 3);
+        }
+        Eigen::Matrix<float, 12, 1> motor_torque2 = kin_.J_feet_.transpose() * feet_force2;
+        for (int i = 0; i < 4; i++) {
+            motor_torque2[i * 3 + 0] += torque_hip_gravity[i];
+        }
+
+        if (time_ < 5.f)
+            setTorque(motor_torque);
+        else
+            setTorque(motor_torque2);
     }
 
-    void sendCommandPD()
-    {
+    void sendCommandPD() {
         kin_.update();
         setMotorZero();
         Eigen::Vector4f torque_hip_gravity;
@@ -54,8 +101,7 @@ public:
         Eigen::Vector4f pos_calf;
         pos_calf << -1.3, -1.3, -1.3, -1.3;
         Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
-        for (int i = 0; i < 4; i++)
-        {
+        for (int i = 0; i < 4; i++) {
             motor_torque[i * 3 + 0] = torque_hip_gravity[i] + 70 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
             motor_torque[i * 3 + 1] = 180 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
             motor_torque[i * 3 + 2] = 300 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
@@ -63,15 +109,12 @@ public:
         setTorque(motor_torque);
     }
 
-    void setTime(const double &time)
-    {
+    void setTime(const double &time) {
         time_ = time;
     }
 
-    static void setMotorZero()
-    {
-        for (int i = 0; i < 4; i++)
-        {
+    static void setMotorZero() {
+        for (int i = 0; i < 4; i++) {
             lowCmd.motorCmd[i * 3 + 0].mode = 0x0A;
             lowCmd.motorCmd[i * 3 + 0].position = PosStopF;
             lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0;
@@ -93,16 +136,21 @@ public:
         }
     }
 
+    static void __attribute__ ((used)) printMat(const Eigen::Matrix<float, 3, 12> &mat) {
+        std::cout << mat << std::endl;
+    }
+
+    static void __attribute__ ((used)) printMat(const Eigen::MatrixXf &mat) {
+        std::cout << mat << std::endl;
+    }
+
 private:
 
-    static void setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque)
-    {
-        for (int i = 0; i < 12; i++)
-        {
+    static void setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
+        for (int i = 0; i < 12; i++) {
             lowCmd.motorCmd[i].torque = motor_torque[i];
         }
-        for (int i = 0; i < 4; i++)
-        {
+        for (int i = 0; i < 4; i++) {
             lowCmd.motorCmd[i * 3 + 0].position = PosStopF;
             lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0; // 70
             lowCmd.motorCmd[i * 3 + 0].velocity = 0;
@@ -118,9 +166,17 @@ private:
         }
     }
 
+    static Eigen::Matrix3f conjMatrix(const Eigen::Vector3f &vec) {
+        Eigen::Matrix3f mat;
+        mat << 0, -vec[2], vec[1],
+                vec[2], 0, -vec[0],
+                -vec[1], vec[0], 0;
+        return mat;
+    }
+
     float time_{0};
     Kinematics kin_;
-    BodyPoseEstimator bodyPoseEstimator_;
+    BodyPoseEstimator est_;
 };
 
 
