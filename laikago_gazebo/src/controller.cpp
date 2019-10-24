@@ -31,7 +31,7 @@ void Controller::sendCommand() {
     float kp_imu = 10000;
     float kd_imu = 500;
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
-    desired_pos_imu << 0, 0, 0.4, 0.0*sin(2*M_PI*0.1*(time_-3.f)), 0, 0;
+    desired_pos_imu << 0, 0, 0.4, 0, 0, 0;
     Eigen::Matrix<float, 6, 1> pos_imu;
     pos_imu << est_.worldState_.bodyPosition.x,
             est_.worldState_.bodyPosition.y,
@@ -54,10 +54,7 @@ void Controller::sendCommand() {
     Eigen::MatrixXf opt_b(num_rows, 1);
     opt_b << acc_imu, acc_zero;
     Eigen::Matrix<float, 12, 1> grf;
-    auto t_start = std::chrono::high_resolution_clock::now();
     grf = opt_A.colPivHouseholderQr().solve(opt_b);
-    auto t_end = std::chrono::high_resolution_clock::now();
-//    std::cout << std::chrono::duration<double, std::milli>(t_end-t_start).count() << std::endl;
 
     Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
     for (int i = 0; i < 4; i++) {
@@ -66,9 +63,9 @@ void Controller::sendCommand() {
 
     // merge kinematics and grf control
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
-//    std::cout << time_ << std::endl;
-//    feet_force = time_ < 3.f ? feet_force_kin : feet_force_grf;
-    feet_force = feet_force_kin;
+    std::cout << time_ << std::endl;
+    feet_force = time_ < 3.f ? feet_force_kin : feet_force_grf;
+//    feet_force = feet_force_kin;
 
     // convert to torque
     Eigen::Matrix<float, 12, 1> motor_torque = kin_.J_feet_.transpose() * feet_force;

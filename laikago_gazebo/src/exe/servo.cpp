@@ -241,7 +241,6 @@ int main(int argc, char **argv) {
         control logic
         */
         // pause simulation to compute controller
-        auto t_start = std::chrono::high_resolution_clock::now();
         pauseGazebo.call(emptySrv);
 
         // control algorithm
@@ -259,11 +258,7 @@ int main(int argc, char **argv) {
         // finish one iteration
         ros::spinOnce();
         unpauseGazebo.call(emptySrv);
-        auto t_end = std::chrono::high_resolution_clock::now();
-        std::cout << std::chrono::duration<double, std::milli>(t_end-t_start).count() << std::endl;
-        std::cout << loop_rate.cycleTime().toSec() << std::endl;
-        if(!loop_rate.sleep())
-            std::cout<< "no sleep" << std::endl;
+        loop_rate.sleep();
 
     }
     return 0;
