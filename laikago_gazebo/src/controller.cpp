@@ -5,23 +5,17 @@ void Controller::sendCommand() {
     est_.update();
     est_.publish();
     setMotorZero();
-    Eigen::Matrix<float, 12, 1> p_feet_desired;
 
+    // force from feet kinematics
+    Eigen::Matrix<float, 12, 1> p_feet_desired;
     p_feet_desired.segment(0, 3) << 0.21, -0.14, -0.4;
     p_feet_desired.segment(3, 3) << 0.21, 0.14, -0.4;
     p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.4;
     p_feet_desired.segment(9, 3) << -0.22, 0.14, -0.4;
 
     Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - kin_.p_feet_;
-    Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
-    feet_force = 2000.0 * p_feet_error;
-
-    Eigen::Matrix<float, 12, 1> motor_torque = kin_.J_feet_.transpose() * feet_force;
-    Eigen::Vector4f torque_hip_gravity;
-    torque_hip_gravity << -0.86, 0.86, -0.86, 0.86;
-    for (int i = 0; i < 4; i++) {
-        motor_torque[i * 3 + 0] += torque_hip_gravity[i];
-    }
+    Eigen::Matrix<float, 12, 1> feet_force_kin = Eigen::Matrix<float, 12, 1>::Zero();
+    feet_force_kin = 2000.0 * p_feet_error;
 
     // matrix of feet force to acceleration
     Eigen::Matrix<float, 3, 12> Mat_lin;
@@ -35,12 +29,12 @@ void Controller::sendCommand() {
 
     // acceleration
     float kp_imu = 10000;
-    float kd_imu = 100;
-    Eigen::Matrix<float, 6, 1> desired_imu;
-    desired_imu << 0, 0, 0.4, 0, 0, 0;
+    float kd_imu = 500;
+    Eigen::Matrix<float, 6, 1> desired_pos_imu;
+    desired_pos_imu << 0, 0, 0.4, 0.0*sin(2*M_PI*0.1*(time_-3.f)), 0, 0;
     Eigen::Matrix<float, 6, 1> pos_imu;
-    pos_imu << est_.worldState_.bodyPosition.x * 1,
-            est_.worldState_.bodyPosition.y * 1,
+    pos_imu << est_.worldState_.bodyPosition.x,
+            est_.worldState_.bodyPosition.y,
             est_.worldState_.bodyPosition.z,
             kin_.q_imu_;
     Eigen::Matrix<float, 6, 1> vel_imu;
@@ -49,35 +43,43 @@ void Controller::sendCommand() {
             est_.worldState_.bodySpeed.z,
             kin_.dq_imu_;
     Eigen::Matrix<float, 6, 1> acc_imu;
-    acc_imu = kp_imu * (desired_imu - pos_imu) - kd_imu * vel_imu;
+    acc_imu = kp_imu * (desired_pos_imu - pos_imu) - kd_imu * vel_imu;
     Eigen::Matrix<float, 12, 1> acc_zero;
     acc_zero = Eigen::Matrix<float, 12, 1>::Zero();
 
     // linear optimization
-    Eigen::Matrix<float, 18, 12> opt_A;
+    auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_I.rows();
+    Eigen::MatrixXf opt_A(num_rows, 12);
     opt_A << Mat_lin, Mat_rot, Mat_I;
-    Eigen::Matrix<float, 18, 1> opt_b;
+    Eigen::MatrixXf opt_b(num_rows, 1);
     opt_b << acc_imu, acc_zero;
     Eigen::Matrix<float, 12, 1> grf;
+    auto t_start = std::chrono::high_resolution_clock::now();
     grf = opt_A.colPivHouseholderQr().solve(opt_b);
+    auto t_end = std::chrono::high_resolution_clock::now();
+//    std::cout << std::chrono::duration<double, std::milli>(t_end-t_start).count() << std::endl;
+
+    Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
+    for (int i = 0; i < 4; i++) {
+        feet_force_grf.segment(3 * i, 3) = kin_.R_imu_.transpose() * -grf.segment(3 * i, 3);
+    }
+
+    // merge kinematics and grf control
+    Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
+//    std::cout << time_ << std::endl;
+//    feet_force = time_ < 3.f ? feet_force_kin : feet_force_grf;
+    feet_force = feet_force_kin;
 
     // convert to torque
-    Eigen::Matrix<float, 12, 1> feet_force2 = Eigen::Matrix<float, 12, 1>::Zero();
+    Eigen::Matrix<float, 12, 1> motor_torque = kin_.J_feet_.transpose() * feet_force;
+    Eigen::Vector4f torque_hip_gravity;
+    torque_hip_gravity << -0.86, 0.86, -0.86, 0.86;
     for (int i = 0; i < 4; i++) {
-        feet_force2.segment(3 * i, 3) = kin_.R_imu_.transpose() * -grf.segment(3 * i, 3);
+        motor_torque[i * 3 + 0] += torque_hip_gravity[i];
     }
-    Eigen::Matrix<float, 12, 1> motor_torque2 = kin_.J_feet_.transpose() * feet_force2;
-    for (int i = 0; i < 4; i++) {
-        motor_torque2[i * 3 + 0] += torque_hip_gravity[i];
-    }
+    setTorque(motor_torque);
 
-    Eigen::MatrixXf test_mat(3, 3);
-    test_mat.setZero();
 
-    if (time_ < 5.f)
-        setTorque(motor_torque);
-    else
-        setTorque(motor_torque2);
 }
 
 void Controller::sendCommandPD() {

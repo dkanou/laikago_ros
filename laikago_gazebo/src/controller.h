@@ -30,7 +30,7 @@ public:
 
 private:
 
-    void setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque);
+    static void setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque);
 
     static Eigen::Matrix3f conjMatrix(const Eigen::Vector3f &vec);
 
