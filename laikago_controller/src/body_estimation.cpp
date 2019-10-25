@@ -1,4 +1,4 @@
-#include "body_estimation.h"
+#include "../include/body_estimation.h"
 
 BodyPoseEstimator::BodyPoseEstimator() {
     _xhat.setZero();

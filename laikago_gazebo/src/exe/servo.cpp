@@ -13,8 +13,8 @@ Use of this source code is governed by the MPL-2.0 license, see LICENSE.
 #include <std_msgs/Bool.h>
 #include <std_srvs/Empty.h>
 #include <vector>
-#include "body.h"
-#include "controller.h"
+#include "../../../laikago_controller/include/body.h"
+#include "../../../laikago_controller/include/controller.h"
 #include "laikago_msgs/LowCmd.h"
 #include "laikago_msgs/LowState.h"
 #include "laikago_msgs/MotorCmd.h"

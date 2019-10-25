@@ -1,4 +1,4 @@
-#include "controller.h"
+#include "../include/controller.h"
 
 void Controller::sendCommand() {
     kin_.update();

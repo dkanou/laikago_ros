@@ -34,10 +34,10 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${GAZEBO_CXX_FLAGS}")
 
 # Declare a C++ library
 add_library(${PROJECT_NAME}
-    src/body.cpp
-    src/kinematics.cpp
-    src/body_estimation.cpp
-    src/controller.cpp
+        ../laikago_controller/src/body.cpp
+        ../laikago_controller/src/kinematics.cpp
+        ../laikago_controller/src/body_estimation.cpp
+        ../laikago_controller/src/controller.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

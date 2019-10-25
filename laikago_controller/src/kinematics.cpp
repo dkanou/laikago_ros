@@ -1,4 +1,4 @@
-#include "kinematics.h"
+#include "../include/kinematics.h"
 
 void Kinematics::update() {
     updateEigenState();
