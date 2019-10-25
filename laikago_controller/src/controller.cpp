@@ -81,13 +81,14 @@ void Controller::sendCommand() {
         motor_torque[i * 3 + 0] += torque_hip_gravity[i];
     }
     setTorque(motor_torque);
-
-
 }
 
 void Controller::sendCommandPD() {
     kin_.update();
+    est_.update();
+    est_.publish();
     setMotorZero();
+
     Eigen::Vector4f torque_hip_gravity;
     torque_hip_gravity << -0.86, 0.86, -0.86, 0.86;
     Eigen::Vector4f pos_hip;
@@ -97,12 +98,12 @@ void Controller::sendCommandPD() {
     Eigen::Vector4f pos_calf;
     pos_calf << -1.3, -1.3, -1.3, -1.3;
     Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
-    for (int i = 0; i < 4; i++) {
-        motor_torque[i * 3 + 0] = torque_hip_gravity[i] + 70 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
-        motor_torque[i * 3 + 1] = 180 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
-        motor_torque[i * 3 + 2] = 300 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
-    }
-    setTorque(motor_torque);
+//    for (int i = 0; i < 4; i++) {
+//        motor_torque[i * 3 + 0] = torque_hip_gravity[i] + 70 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
+//        motor_torque[i * 3 + 1] = 180 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
+//        motor_torque[i * 3 + 2] = 300 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
+//    }
+//    setTorque(motor_torque);
 }
 
 void Controller::setTime(const double &time) {

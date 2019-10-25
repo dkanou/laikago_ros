@@ -6,6 +6,7 @@
 #include "body.h"
 
 using namespace casadi;
+using laikago_model::lowCmd;
 using laikago_model::lowState;
 using laikago_model::highState;
 
@@ -22,6 +23,8 @@ public:
     void updateKinematics();
     void updateFootForce();
 
+    static void setLowState(const laikago_msgs::LowState &RecvLowROS);
+
     void __attribute__ ((used)) printFeet() {
         std::cout << "p_feet:\n" << p_feet_.transpose() << std::endl;
         std::cout << "J_feet:\n" << J_feet_ << std::endl;
@@ -30,6 +33,10 @@ public:
 
     static void __attribute__ ((used)) printState() {
         std::cout << lowState << std::endl;
+    }
+
+    static void __attribute__ ((used)) printCmd() {
+        std::cout << lowCmd << std::endl;
     }
 
     Eigen::Matrix<float, 3, 1> q_imu_;
@@ -41,7 +48,7 @@ public:
     Eigen::Matrix<float, 12, 1> dp_feet_;
     Eigen::Matrix<float, 12, 12> J_feet_;
     Eigen::Matrix<float, 12, 3> R_feet_;
-
+    static bool sim;
 private:
     Function f_kinBodyFeet_;
 };

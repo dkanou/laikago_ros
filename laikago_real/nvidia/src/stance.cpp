@@ -10,7 +10,7 @@
 using namespace laikago;
 
 static long motiontime = 0;
-float Kv[3] = {0};  
+float Kv[3] = {0};
 float Kp[3] = {0};
 float movejoint1 = 0, movejoint2 = 0;
 unsigned long int Tpi = 0;
@@ -23,9 +23,8 @@ Control control(LOWLEVEL);
 LCM roslcm;
 boost::mutex mutex;
 
-void* update_loop(void* data)
-{
-    while(ros::ok){
+void *update_loop(void *data) {
+    while (ros::ok) {
         boost::mutex::scoped_lock lock(mutex);
         roslcm.Recv();
         lock.unlock();
@@ -33,9 +32,12 @@ void* update_loop(void* data)
     }
 }
 
-int main(int argc, char *argv[])
-{
-    system("echo '' | sudo -S ${Laikago_SDK}/cmake-build-debug/sdk_lcm_server_low &");
+//todo: a better way to declare sim or real
+bool Kinematics::sim = false;
+
+int main(int argc, char *argv[]) {
+    //todo: do not use system and sudo
+    if (system("sudo ${Laikago_SDK}/cmake-build-debug/sdk_lcm_server_low &") != 0) { return -1; };
     std::cout << "WARNING: Control level is set to LOW-level." << std::endl;
 
     ros::init(argc, argv, "neutral_mode_low");
@@ -44,19 +46,37 @@ int main(int argc, char *argv[])
     roslcm.SubscribeState();
 
     pthread_t tid;
-    pthread_create(&tid, NULL, update_loop, NULL);
+    pthread_create(&tid, nullptr, update_loop, nullptr);
+
+    ros::Publisher lowState_pub = n.advertise<laikago_msgs::LowState>("/laikago_gazebo/lowState/state", 1);
+    ros::Publisher highState_pub = n.advertise<laikago_msgs::HighState>("/laikago_gazebo/highState/state", 1);
 
     SendLowROS.levelFlag = LOWLEVEL;
-    for(int i = 1; i<13; i++){
+    for (int i = 1; i < 13; i++) {
         SendLowROS.motorCmd[i].mode = 0x0A;   // motor switch to servo (PMSM) mode
     }
 
-    while (ros::ok()){
+    Controller controller;
+    double begin_time = ros::Time::now().toSec();
+
+    while (ros::ok()) {
         motiontime++;
         roslcm.Get(RecvLowLCM);
         memcpy(&RecvLowROS, &RecvLowLCM, sizeof(LowState));
+        Kinematics::setLowState(RecvLowROS);
+
+        // control algorithm
+        double sim_time = ros::Time::now().toSec() - begin_time;
+        controller.setTime(sim_time);
+        controller.sendCommandPD();
+
+        // publish state and cmd
+        lowState_pub.publish(lowState);
+        highState_pub.publish(highState);
         memcpy(&SendLowLCM, &SendLowROS, sizeof(LowCmd));
         roslcm.Send(SendLowLCM);
+
+        // finish one iteration
         ros::spinOnce();
         loop_rate.sleep();
     }

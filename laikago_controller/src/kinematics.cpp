@@ -3,7 +3,9 @@
 void Kinematics::update() {
     updateEigenState();
     updateKinematics();
-    updateFootForce();
+    if (sim) {
+        updateFootForce();
+    }
 }
 
 void Kinematics::updateEigenState() {
@@ -53,4 +55,15 @@ void Kinematics::updateFootForce() {
         eeForce_vec_world = R_foot_world * eeForce_vec;
         lowState.footForce[i] = eeForce_vec_world[2];
     }
+}
+
+void Kinematics::setLowState(const laikago_msgs::LowState &RecvLowROS) {
+    lowState.imu = RecvLowROS.imu;
+    for (int i = 0; i < 12; i++) {
+        lowState.motorState[i] = RecvLowROS.motorState[i+1];
+    }
+    lowState.footForce = RecvLowROS.footForce;
+    lowState.tick = RecvLowROS.tick;
+    lowState.wirelessRemote = RecvLowROS.wirelessRemote;
+    lowState.crc = RecvLowROS.crc;
 }
