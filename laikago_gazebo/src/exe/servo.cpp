@@ -249,8 +249,8 @@ int main(int argc, char **argv) {
         controller.sendCommand();
 
         // publish state and cmd
-        lowState_pub.publish(lowState);
-        highState_pub.publish(highState);
+//        lowState_pub.publish(lowState);
+//        highState_pub.publish(highState);
         for (int m = 0; m < 12; m++) {
             servo_pub[m].publish(lowCmd.motorCmd[m]);
         }

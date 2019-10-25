@@ -8,10 +8,10 @@ void Controller::sendCommand() {
 
     // force from feet kinematics
     Eigen::Matrix<float, 12, 1> p_feet_desired;
-    p_feet_desired.segment(0, 3) << 0.21, -0.14, -0.4;
-    p_feet_desired.segment(3, 3) << 0.21, 0.14, -0.4;
-    p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.4;
-    p_feet_desired.segment(9, 3) << -0.22, 0.14, -0.4;
+    p_feet_desired.segment(0, 3) << 0.21, -0.14, -0.4 - 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(3, 3) << 0.21, 0.14, -0.4 + 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.4 - 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(9, 3) << -0.22, 0.14, -0.4 + 0.00 * sin(2 * M_PI * 0.2 * time_);
 
     Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - kin_.p_feet_;
     Eigen::Matrix<float, 12, 1> feet_force_kin = Eigen::Matrix<float, 12, 1>::Zero();
@@ -25,13 +25,16 @@ void Controller::sendCommand() {
         Eigen::Vector3f foot_world = kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3);
         Mat_rot.block(0, 3 * i, 3, 3) = conjMatrix(foot_world);
     }
-    Eigen::Matrix<float, 12, 12> Mat_I = Eigen::Matrix<float, 12, 12>::Identity();
+    Eigen::Matrix<float, 12, 12> Mat_force = Eigen::Matrix<float, 12, 12>::Identity();
 
     // acceleration
     float kp_imu = 10000;
-    float kd_imu = 500;
+    float kd_imu = 100;
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
-    desired_pos_imu << 0, 0, 0.4, 0, 0, 0;
+    desired_pos_imu << 0, 0, 0.4,
+    0.5 * sin(2 * M_PI * 0.2 * (time_ - 2)),
+    0.2 * sin(2 * M_PI * 0.2 * (time_ - 2)),
+    0.5 * sin(2 * M_PI * 0.2 * (time_ - 2));
     Eigen::Matrix<float, 6, 1> pos_imu;
     pos_imu << est_.worldState_.bodyPosition.x,
             est_.worldState_.bodyPosition.y,
@@ -44,16 +47,20 @@ void Controller::sendCommand() {
             kin_.dq_imu_;
     Eigen::Matrix<float, 6, 1> acc_imu;
     acc_imu = kp_imu * (desired_pos_imu - pos_imu) - kd_imu * vel_imu;
-    Eigen::Matrix<float, 12, 1> acc_zero;
-    acc_zero = Eigen::Matrix<float, 12, 1>::Zero();
+    Eigen::Matrix<float, 12, 1> acc_force;
+    acc_force = Eigen::Matrix<float, 12, 1>::Zero();
+    for (int i = 0; i < 4; i++) {
+        acc_force.segment(3 * i, 3) << 0, 0, 0;
+    }
 
     // linear optimization
-    auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_I.rows();
+    auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_force.rows();
     Eigen::MatrixXf opt_A(num_rows, 12);
-    opt_A << Mat_lin, Mat_rot, Mat_I;
     Eigen::MatrixXf opt_b(num_rows, 1);
-    opt_b << acc_imu, acc_zero;
     Eigen::Matrix<float, 12, 1> grf;
+    float force_weight = 1;
+    opt_A << Mat_lin, Mat_rot, force_weight * Mat_force;
+    opt_b << acc_imu, force_weight * acc_force;
     grf = opt_A.colPivHouseholderQr().solve(opt_b);
 
     Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
@@ -63,8 +70,7 @@ void Controller::sendCommand() {
 
     // merge kinematics and grf control
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
-    std::cout << time_ << std::endl;
-    feet_force = time_ < 3.f ? feet_force_kin : feet_force_grf;
+    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
 //    feet_force = feet_force_kin;
 
     // convert to torque
