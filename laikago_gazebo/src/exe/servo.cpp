@@ -196,6 +196,8 @@ private:
     ros::Subscriber servo_sub[12], footForce_sub[4], imu_sub;
 };
 
+bool Kinematics::sim = true;
+
 int main(int argc, char **argv) {
     ros::init(argc, argv, "laikago_gazebo_servo");
 
@@ -233,7 +235,7 @@ int main(int argc, char **argv) {
     motion_init();
     resetGazebo.call(emptySrv);
 
-    Controller controller;
+    Controller controller(&n);
     double begin_time = ros::Time::now().toSec();
 
     while (ros::ok()) {

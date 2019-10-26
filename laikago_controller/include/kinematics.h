@@ -25,6 +25,8 @@ public:
 
     static void setLowState(const laikago_msgs::LowState &RecvLowROS);
 
+    static void setLowCmd(laikago_msgs::LowCmd &SendLowROS);
+
     void __attribute__ ((used)) printFeet() {
         std::cout << "p_feet:\n" << p_feet_.transpose() << std::endl;
         std::cout << "J_feet:\n" << J_feet_ << std::endl;

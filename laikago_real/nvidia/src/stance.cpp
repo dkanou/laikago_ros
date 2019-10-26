@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
     if (system("sudo ${Laikago_SDK}/cmake-build-debug/sdk_lcm_server_low &") != 0) { return -1; };
     std::cout << "WARNING: Control level is set to LOW-level." << std::endl;
 
-    ros::init(argc, argv, "neutral_mode_low");
+    ros::init(argc, argv, "stance");
     ros::NodeHandle n;
     ros::Rate loop_rate(500);
     roslcm.SubscribeState();
@@ -56,19 +56,20 @@ int main(int argc, char *argv[]) {
         SendLowROS.motorCmd[i].mode = 0x0A;   // motor switch to servo (PMSM) mode
     }
 
-    Controller controller;
+    Controller controller(&n);
     double begin_time = ros::Time::now().toSec();
 
     while (ros::ok()) {
         motiontime++;
         roslcm.Get(RecvLowLCM);
         memcpy(&RecvLowROS, &RecvLowLCM, sizeof(LowState));
-        Kinematics::setLowState(RecvLowROS);
 
         // control algorithm
+        Kinematics::setLowState(RecvLowROS);
         double sim_time = ros::Time::now().toSec() - begin_time;
         controller.setTime(sim_time);
         controller.sendCommandPD();
+        Kinematics::setLowCmd(SendLowROS);
 
         // publish state and cmd
         lowState_pub.publish(lowState);

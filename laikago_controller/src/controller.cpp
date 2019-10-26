@@ -1,5 +1,16 @@
 #include "../include/controller.h"
 
+Controller::Controller(ros::NodeHandle *n) : n_(*n) {
+    param_sub = n_.subscribe("/joint_pd", 1, &Controller::paramCallback, this);
+}
+
+void Controller::paramCallback(const laikago_msgs::PDgain &msg) {
+    for (int i = 0; i < 3; i++) {
+        kp_[i] = msg.kp[i];
+        kd_[i] = msg.kd[i];
+    }
+}
+
 void Controller::sendCommand() {
     kin_.update();
     est_.update();
@@ -8,10 +19,10 @@ void Controller::sendCommand() {
 
     // force from feet kinematics
     Eigen::Matrix<float, 12, 1> p_feet_desired;
-    p_feet_desired.segment(0, 3) << 0.21, -0.14, -0.4 - 0.00 * sin(2 * M_PI * 0.2 * time_);
-    p_feet_desired.segment(3, 3) << 0.21, 0.14, -0.4 + 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(0, 3) << +0.21, -0.14, -0.4 - 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(3, 3) << +0.21, +0.14, -0.4 + 0.00 * sin(2 * M_PI * 0.2 * time_);
     p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.4 - 0.00 * sin(2 * M_PI * 0.2 * time_);
-    p_feet_desired.segment(9, 3) << -0.22, 0.14, -0.4 + 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(9, 3) << -0.22, +0.14, -0.4 + 0.00 * sin(2 * M_PI * 0.2 * time_);
 
     Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - kin_.p_feet_;
     Eigen::Matrix<float, 12, 1> feet_force_kin = Eigen::Matrix<float, 12, 1>::Zero();
@@ -32,9 +43,9 @@ void Controller::sendCommand() {
     float kd_imu = 100;
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
     desired_pos_imu << 0, 0, 0.4,
-    0.5 * sin(2 * M_PI * 0.2 * (time_ - 2)),
-    0.2 * sin(2 * M_PI * 0.2 * (time_ - 2)),
-    0.5 * sin(2 * M_PI * 0.2 * (time_ - 2));
+            0.5 * sin(2 * M_PI * 0.2 * (time_ - 2)),
+            0.2 * sin(2 * M_PI * 0.2 * (time_ - 2)),
+            0.5 * sin(2 * M_PI * 0.2 * (time_ - 2));
     Eigen::Matrix<float, 6, 1> pos_imu;
     pos_imu << est_.worldState_.bodyPosition.x,
             est_.worldState_.bodyPosition.y,
@@ -98,12 +109,15 @@ void Controller::sendCommandPD() {
     Eigen::Vector4f pos_calf;
     pos_calf << -1.3, -1.3, -1.3, -1.3;
     Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
-//    for (int i = 0; i < 4; i++) {
-//        motor_torque[i * 3 + 0] = torque_hip_gravity[i] + 70 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
-//        motor_torque[i * 3 + 1] = 180 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
-//        motor_torque[i * 3 + 2] = 300 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
-//    }
-//    setTorque(motor_torque);
+    double ramp_time = fmin(time_ / 10.0, 1);
+    for (int i = 0; i < 4; i++) {
+        motor_torque[i * 3 + 0] = torque_hip_gravity[i];
+        motor_torque[i * 3 + 0] += fmin(time_ / 5.0, 1) * 300 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
+        motor_torque[i * 3 + 1] = fmin(time_ / 20.0, 1) * 240 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
+        motor_torque[i * 3 + 2] = fmin(time_ / 20.0, 1) * 120 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
+    }
+    setTorque(motor_torque);
+    std::cout << time_ << std::endl;
 }
 
 void Controller::setTime(const double &time) {
@@ -139,17 +153,17 @@ void Controller::setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
     }
     for (int i = 0; i < 4; i++) {
         lowCmd.motorCmd[i * 3 + 0].position = PosStopF;
-        lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0; // 70
+        lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 0].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 0].velocityStiffness = 3; // 3
+        lowCmd.motorCmd[i * 3 + 0].velocityStiffness = 0.08 * fmin(time_ / 5.0, 1);
         lowCmd.motorCmd[i * 3 + 1].position = PosStopF;
-        lowCmd.motorCmd[i * 3 + 1].positionStiffness = 0; // 180
+        lowCmd.motorCmd[i * 3 + 1].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 1].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = 4; // 8
+        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = 0.01 * fmin(time_ / 10.0, 1);
         lowCmd.motorCmd[i * 3 + 2].position = PosStopF;
-        lowCmd.motorCmd[i * 3 + 2].positionStiffness = 0; // 300
+        lowCmd.motorCmd[i * 3 + 2].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 2].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = 2; // 15
+        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = 0.005 * fmin(time_ / 10.0, 1);
     }
 }
 
@@ -160,3 +174,7 @@ Eigen::Matrix3f Controller::conjMatrix(const Eigen::Vector3f &vec) {
             -vec[1], vec[0], 0;
     return mat;
 }
+
+
+
+

@@ -67,3 +67,9 @@ void Kinematics::setLowState(const laikago_msgs::LowState &RecvLowROS) {
     lowState.wirelessRemote = RecvLowROS.wirelessRemote;
     lowState.crc = RecvLowROS.crc;
 }
+
+void Kinematics::setLowCmd(laikago_msgs::LowCmd &SendLowROS) {
+    for (int i = 0; i < 12; i++) {
+        SendLowROS.motorCmd[i+1] = lowCmd.motorCmd[i];
+    }
+}
