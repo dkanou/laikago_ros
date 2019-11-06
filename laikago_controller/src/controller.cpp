@@ -101,7 +101,7 @@ void Controller::sendCommandPD() {
     setMotorZero();
 
     Eigen::Vector4f torque_hip_gravity;
-    torque_hip_gravity << -0.86, 0.86, -0.86, 0.86;
+    torque_hip_gravity << -0.86, +0.86, -0.86, +0.86;
     Eigen::Vector4f pos_hip;
     pos_hip << 0.0, 0.0, 0.0, 0.0;
     Eigen::Vector4f pos_thigh;
@@ -109,12 +109,11 @@ void Controller::sendCommandPD() {
     Eigen::Vector4f pos_calf;
     pos_calf << -1.3, -1.3, -1.3, -1.3;
     Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
-    double ramp_time = fmin(time_ / 10.0, 1);
     for (int i = 0; i < 4; i++) {
         motor_torque[i * 3 + 0] = torque_hip_gravity[i];
-        motor_torque[i * 3 + 0] += fmin(time_ / 5.0, 1) * 300 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
-        motor_torque[i * 3 + 1] = fmin(time_ / 20.0, 1) * 240 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
-        motor_torque[i * 3 + 2] = fmin(time_ / 20.0, 1) * 120 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
+        motor_torque[i * 3 + 0] += fmin(time_ / 10.0, 1) * 100 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
+        motor_torque[i * 3 + 1] = fmin(time_ / 10.0, 1) * 120 * (pos_thigh[i] - kin_.q_motor_[i * 3 + 1]);
+        motor_torque[i * 3 + 2] = fmin(time_ / 10.0, 1) * 60 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
     }
     setTorque(motor_torque);
     std::cout << time_ << std::endl;
@@ -159,11 +158,11 @@ void Controller::setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
         lowCmd.motorCmd[i * 3 + 1].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 1].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 1].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = 0.01 * fmin(time_ / 10.0, 1);
+        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = 0.02 * fmin(time_ / 5.0, 1);
         lowCmd.motorCmd[i * 3 + 2].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 2].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 2].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = 0.005 * fmin(time_ / 10.0, 1);
+        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = 0.01 * fmin(time_ / 5.0, 1);
     }
 }
 
