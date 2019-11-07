@@ -68,7 +68,7 @@ int main(int argc, char *argv[]) {
         Kinematics::setLowState(RecvLowROS);
         double sim_time = ros::Time::now().toSec() - begin_time;
         controller.setTime(sim_time);
-        controller.sendCommandPD();
+        controller.sendCommand();
         Kinematics::setLowCmd(SendLowROS);
 
         // publish state and cmd

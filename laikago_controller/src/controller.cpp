@@ -19,14 +19,14 @@ void Controller::sendCommand() {
 
     // force from feet kinematics
     Eigen::Matrix<float, 12, 1> p_feet_desired;
-    p_feet_desired.segment(0, 3) << +0.21, -0.14, -0.4 - 0.00 * sin(2 * M_PI * 0.2 * time_);
-    p_feet_desired.segment(3, 3) << +0.21, +0.14, -0.4 + 0.00 * sin(2 * M_PI * 0.2 * time_);
-    p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.4 - 0.00 * sin(2 * M_PI * 0.2 * time_);
-    p_feet_desired.segment(9, 3) << -0.22, +0.14, -0.4 + 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(0, 3) << +0.21, -0.14, -0.40 + 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(3, 3) << +0.21, +0.14, -0.40 - 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.40 - 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(9, 3) << -0.22, +0.14, -0.40 + 0.00 * sin(2 * M_PI * 0.2 * time_);
 
     Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - kin_.p_feet_;
     Eigen::Matrix<float, 12, 1> feet_force_kin = Eigen::Matrix<float, 12, 1>::Zero();
-    feet_force_kin = 2000.0 * p_feet_error;
+    feet_force_kin = fmin(time_ / 10.0, 1) * 1500 * p_feet_error;
 
     // matrix of feet force to acceleration
     Eigen::Matrix<float, 3, 12> Mat_lin;
@@ -81,17 +81,19 @@ void Controller::sendCommand() {
 
     // merge kinematics and grf control
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
-    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
-//    feet_force = feet_force_kin;
+//    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
+    feet_force = feet_force_kin;
 
     // convert to torque
-    Eigen::Matrix<float, 12, 1> motor_torque = kin_.J_feet_.transpose() * feet_force;
+    Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
+    motor_torque = kin_.J_feet_.transpose() * feet_force;
     Eigen::Vector4f torque_hip_gravity;
-    torque_hip_gravity << -0.86, 0.86, -0.86, 0.86;
+    torque_hip_gravity << -0.86, +0.86, -0.86, +0.86;
     for (int i = 0; i < 4; i++) {
         motor_torque[i * 3 + 0] += torque_hip_gravity[i];
     }
     setTorque(motor_torque);
+    std::cout << time_ << " " << (kin_.J_feet_.transpose() * feet_force).transpose() << std::endl;
 }
 
 void Controller::sendCommandPD() {
@@ -116,7 +118,6 @@ void Controller::sendCommandPD() {
         motor_torque[i * 3 + 2] = fmin(time_ / 10.0, 1) * 60 * (pos_calf[i] - kin_.q_motor_[i * 3 + 2]);
     }
     setTorque(motor_torque);
-    std::cout << time_ << std::endl;
 }
 
 void Controller::setTime(const double &time) {
