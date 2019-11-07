@@ -38,14 +38,30 @@ void Controller::sendCommand() {
     }
     Eigen::Matrix<float, 12, 12> Mat_force = Eigen::Matrix<float, 12, 12>::Identity();
 
+    // reset in stance
+    if (est_.isStance() and !is_stance_) {
+        // todo: remove the for loop
+        for (int i = 0; i < 100; i++) {
+            est_.resetState();
+        }
+        yaw_offset_ = kin_.q_imu_[2];
+        is_stance_ = true;
+        std::cout << "reset and yaw offset: " << yaw_offset_*180/M_PI << " degrees" << std::endl;
+    } else if (!est_.isStance() and is_stance_) {
+        is_stance_ = false;
+        std::cout << "left in air" << std::endl;
+    }
+
     // acceleration
-    float kp_imu = 10000;
-    float kd_imu = 100;
+    Eigen::DiagonalMatrix<float, 6> kp_imu;
+    kp_imu.diagonal() << kp_[0], kp_[0], kp_[0]*10, kp_[1], kp_[1], kp_[1];
+    Eigen::DiagonalMatrix<float, 6> kd_imu;
+    kd_imu.diagonal() << 0, 0, 0, 0, 0, 0;
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
     desired_pos_imu << 0, 0, 0.4,
-            0.5 * sin(2 * M_PI * 0.2 * (time_ - 2)),
-            0.2 * sin(2 * M_PI * 0.2 * (time_ - 2)),
-            0.5 * sin(2 * M_PI * 0.2 * (time_ - 2));
+            0,
+            0,
+            0 + yaw_offset_;
     Eigen::Matrix<float, 6, 1> pos_imu;
     pos_imu << est_.worldState_.bodyPosition.x,
             est_.worldState_.bodyPosition.y,
@@ -63,16 +79,20 @@ void Controller::sendCommand() {
     for (int i = 0; i < 4; i++) {
         acc_force.segment(3 * i, 3) << 0, 0, 0;
     }
+//    std::cout << "desired_pos_imu: " << desired_pos_imu.transpose();
+//    std::cout << "\tpos_imu: " << pos_imu.transpose();
+//    std::cout << std::endl;
 
     // linear optimization
     auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_force.rows();
     Eigen::MatrixXf opt_A(num_rows, 12);
     Eigen::MatrixXf opt_b(num_rows, 1);
     Eigen::Matrix<float, 12, 1> grf;
-    float force_weight = 1;
+    float force_weight = 1e-3;
     opt_A << Mat_lin, Mat_rot, force_weight * Mat_force;
     opt_b << acc_imu, force_weight * acc_force;
     grf = opt_A.colPivHouseholderQr().solve(opt_b);
+//    std::cout << "grf: " << grf.transpose() << std::endl;
 
     Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
     for (int i = 0; i < 4; i++) {
@@ -82,7 +102,13 @@ void Controller::sendCommand() {
     // merge kinematics and grf control
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
 //    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
-    feet_force = feet_force_kin;
+//    feet_force = feet_force_kin;
+    feet_force = (1 - kp_[2]) * feet_force_kin + kp_[2] * feet_force_grf;
+
+
+    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
+    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
+    std::cout << std::endl;
 
     // convert to torque
     Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
@@ -93,7 +119,7 @@ void Controller::sendCommand() {
         motor_torque[i * 3 + 0] += torque_hip_gravity[i];
     }
     setTorque(motor_torque);
-    std::cout << time_ << " " << (kin_.J_feet_.transpose() * feet_force).transpose() << std::endl;
+//    std::cout << time_ << std::endl;
 }
 
 void Controller::sendCommandPD() {

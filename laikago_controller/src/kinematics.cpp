@@ -15,7 +15,7 @@ void Kinematics::updateEigenState() {
                                   lowState.imu.quaternion[3]);
     R_imu_ = quaternion.toRotationMatrix();
     for (int i = 0; i < 3; i++) {
-        q_imu_[i] = lowState.imu.rpy[i];
+        q_imu_[i] = lowState.imu.rpy[i] * M_PI / 180.0f;
         dq_imu_[i] = lowState.imu.gyroscope[i];
     }
     for (int i = 0; i < 12; i++) {

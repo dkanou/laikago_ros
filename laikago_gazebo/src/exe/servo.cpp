@@ -69,9 +69,9 @@ public:
         tf::quaternionMsgToTF(msg.orientation, quaternion);
         double roll, pitch, yaw;
         tf::Matrix3x3(quaternion).getRPY(roll, pitch, yaw);
-        lowState.imu.rpy[0] = roll;
-        lowState.imu.rpy[1] = pitch;
-        lowState.imu.rpy[2] = yaw;
+        lowState.imu.rpy[0] = roll * 180.0f / M_PI;
+        lowState.imu.rpy[1] = pitch * 180.0f / M_PI;
+        lowState.imu.rpy[2] = yaw * 180.0f / M_PI;
     }
 
     void FRhipCallback(const laikago_msgs::MotorState &msg) {

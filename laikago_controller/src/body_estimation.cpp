@@ -167,3 +167,21 @@ void BodyPoseEstimator::update() {
     highState.sideSpeed = _xhat[4];
     highState.updownSpeed = _xhat[5];
 }
+
+void BodyPoseEstimator::resetState() {
+    _xhat[0] = 0;
+    _xhat[1] = 0;
+    for (int i = 0; i < 4; i++) {
+        _xhat[i * 3 + 6] = highState.footPosition2Body[i].x;
+        _xhat[i * 3 + 7] = highState.footPosition2Body[i].y;
+        _xhat[i * 3 + 8] = highState.footPosition2Body[i].z + _xhat[2];
+    }
+    update();
+}
+
+bool BodyPoseEstimator::isStance() {
+    for (int i = 0; i < 4; i++) {
+        if (lowState.footForce[i] < high_) return false;
+    }
+    return true;
+}

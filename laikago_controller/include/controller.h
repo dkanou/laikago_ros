@@ -46,6 +46,8 @@ private:
     ros::Subscriber param_sub;
     float kp_[3]{0, 0, 0};
     float kd_[3]{0, 0, 0};
+    bool is_stance_{false};
+    float yaw_offset_{0};
 };
 
 

@@ -13,6 +13,9 @@ public:
     BodyPoseEstimator();
     void update();
     void publish() { worldState_pub_.publish(worldState_); }
+    void resetState();
+    bool isStance();
+
 
     laikago_msgs::WorldState worldState_;
 
