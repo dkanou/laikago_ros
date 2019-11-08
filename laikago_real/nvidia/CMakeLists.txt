@@ -26,5 +26,5 @@ target_link_libraries(neutral_mode_high ${EXTRA_LIBS} ${catkin_LIBRARIES})
 add_executable(sensor_readings src/sensor_readings.cpp)
 target_link_libraries(sensor_readings ${EXTRA_LIBS} ${catkin_LIBRARIES})
 
-add_executable(stance src/stance.cpp)
+add_executable(stance src/walking.cpp)
 target_link_libraries(stance ${EXTRA_LIBS} ${catkin_LIBRARIES} control_lib)

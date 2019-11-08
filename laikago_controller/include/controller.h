@@ -3,7 +3,7 @@
 
 #include <casadi/casadi.hpp>
 #include <Eigen/Dense>
-#include "laikago_msgs/PDgain.h"
+#include "laikago_msgs/GainParam.h"
 #include "body.h"
 #include "kinematics.h"
 #include "body_estimation.h"
@@ -15,7 +15,7 @@ class Controller {
 public:
     Controller(ros::NodeHandle *n);
 
-    void paramCallback(const laikago_msgs::PDgain &msg);
+    void paramCallback(const laikago_msgs::GainParam &msg);
 
     void sendCommand();
 
@@ -39,6 +39,8 @@ private:
 
     static Eigen::Matrix3f conjMatrix(const Eigen::Vector3f &vec);
 
+    void setTrajectory(Eigen::Matrix<float, 12, 1>& p_feet_desired);
+
     float time_{0};
     Kinematics kin_;
     BodyPoseEstimator est_;
@@ -46,6 +48,7 @@ private:
     ros::Subscriber param_sub;
     float kp_[3]{0, 0, 0};
     float kd_[3]{0, 0, 0};
+    float kt_[6]{};
     bool is_stance_{false};
     float yaw_offset_{0};
     float control_switch_weight_{0};

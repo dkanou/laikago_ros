@@ -20,7 +20,7 @@ add_message_files(
   HighCmd.msg
   HighState.msg
   WorldState.msg
-  PDgain.msg
+  GainParam.msg
 )
 
 generate_messages(

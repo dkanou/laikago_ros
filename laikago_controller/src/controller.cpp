@@ -4,10 +4,13 @@ Controller::Controller(ros::NodeHandle *n) : n_(*n) {
     param_sub = n_.subscribe("/joint_pd", 1, &Controller::paramCallback, this);
 }
 
-void Controller::paramCallback(const laikago_msgs::PDgain &msg) {
+void Controller::paramCallback(const laikago_msgs::GainParam &msg) {
     for (int i = 0; i < 3; i++) {
         kp_[i] = msg.kp[i];
         kd_[i] = msg.kd[i];
+    }
+    for (int i = 0; i < 6; i++) {
+        kt_[i] = msg.kt[i];
     }
 }
 
@@ -19,14 +22,15 @@ void Controller::sendCommand() {
 
     // force from feet kinematics
     Eigen::Matrix<float, 12, 1> p_feet_desired;
-    p_feet_desired.segment(0, 3) << +0.21, -0.14, -0.40 + 0.00 * sin(2 * M_PI * 0.2 * time_);
-    p_feet_desired.segment(3, 3) << +0.21, +0.14, -0.40 - 0.00 * sin(2 * M_PI * 0.2 * time_);
-    p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.40 - 0.00 * sin(2 * M_PI * 0.2 * time_);
-    p_feet_desired.segment(9, 3) << -0.22, +0.14, -0.40 + 0.00 * sin(2 * M_PI * 0.2 * time_);
+    p_feet_desired.segment(0, 3) << +0.21, -0.14, -0.40;
+    p_feet_desired.segment(3, 3) << +0.21, +0.14, -0.40;
+    p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.40;
+    p_feet_desired.segment(9, 3) << -0.22, +0.14, -0.40;
+    setTrajectory(p_feet_desired);
 
     Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - kin_.p_feet_;
     Eigen::Matrix<float, 12, 1> feet_force_kin = Eigen::Matrix<float, 12, 1>::Zero();
-    feet_force_kin = fmin(time_ / 10.0, 1) * 1500 * p_feet_error;
+    feet_force_kin = fmin(time_ / 10.0, 1) * (1500 + kp_[0]) * p_feet_error;
 
     // matrix of feet force to acceleration
     Eigen::Matrix<float, 3, 12> Mat_lin;
@@ -48,7 +52,7 @@ void Controller::sendCommand() {
         }
         yaw_offset_ = kin_.q_imu_[2];
         is_stance_ = true;
-        std::cout << "reset and yaw offset: " << yaw_offset_*180/M_PI << " degrees" << std::endl;
+        std::cout << "reset and yaw offset: " << yaw_offset_ * 180 / M_PI << " degrees" << std::endl;
     } else if (!est_.isStance() and is_stance_) {
         is_stance_ = false;
         std::cout << "left in air" << std::endl;
@@ -107,8 +111,8 @@ void Controller::sendCommand() {
     // merge kinematics and grf control
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
 //    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
-//    feet_force = feet_force_kin;
-    feet_force = (1 - control_switch_weight_) * feet_force_kin + control_switch_weight_ * feet_force_grf;
+    feet_force = feet_force_kin;
+//    feet_force = (1 - control_switch_weight_) * feet_force_kin + control_switch_weight_ * feet_force_grf;
 //    feet_force = (1 - kp_[2]) * feet_force_kin + kp_[2] * feet_force_grf;
 
 //    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
@@ -186,15 +190,15 @@ void Controller::setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
         lowCmd.motorCmd[i * 3 + 0].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 0].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 0].velocityStiffness = 0.08 * fmin(time_ / 5.0, 1);
+        lowCmd.motorCmd[i * 3 + 0].velocityStiffness = fmin(time_ / 5.0, 1) * (0.12 + kd_[0]);
         lowCmd.motorCmd[i * 3 + 1].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 1].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 1].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = 0.02 * fmin(time_ / 5.0, 1);
+        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = fmin(time_ / 5.0, 1) * (0.04 + kd_[1]);
         lowCmd.motorCmd[i * 3 + 2].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 2].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 2].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = 0.01 * fmin(time_ / 5.0, 1);
+        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = fmin(time_ / 5.0, 1) * (0.02 + kd_[2]);
     }
 }
 
@@ -204,6 +208,18 @@ Eigen::Matrix3f Controller::conjMatrix(const Eigen::Vector3f &vec) {
             vec[2], 0, -vec[0],
             -vec[1], vec[0], 0;
     return mat;
+}
+
+void Controller::setTrajectory(Eigen::Matrix<float, 12, 1> &p_feet_desired) {
+    p_feet_desired[2]  += + kt_[3] * sin(2 * M_PI * kt_[4] * time_);
+    p_feet_desired[5]  += - kt_[3] * sin(2 * M_PI * kt_[4] * time_);
+    p_feet_desired[8]  += - kt_[3] * sin(2 * M_PI * kt_[4] * time_);
+    p_feet_desired[11] += + kt_[3] * sin(2 * M_PI * kt_[4] * time_);
+//    for (int i = 0; i < 4; i++) {
+//        p_feet_desired[3 * i + 0] += kt_[0];
+//        p_feet_desired[3 * i + 1] += kt_[1];
+//        p_feet_desired[3 * i + 2] += kt_[2];
+//    }
 }
 
 
