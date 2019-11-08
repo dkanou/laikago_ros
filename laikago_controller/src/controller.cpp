@@ -40,12 +40,10 @@ void Controller::sendCommand() {
         Eigen::Vector3f foot_world = kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3);
         Mat_rot.block(0, 3 * i, 3, 3) = conjMatrix(foot_world);
     }
-    Mat_lin.block(0, 3, 3, 3) *= 0;
-    Mat_rot.block(0, 3, 3, 3) *= 0;
-    Mat_lin.block(0, 6, 3, 3) *= 0;
-    Mat_rot.block(0, 6, 3, 3) *= 0;
 
     Eigen::Matrix<float, 12, 12> Mat_force = Eigen::Matrix<float, 12, 12>::Identity();
+    Eigen::DiagonalMatrix<float, 12> Mat_force_weight;
+    Mat_force_weight.diagonal() = 1e-3 * Eigen::Matrix<float, 12, 1>::Ones();
 
     // reset in stance
     if (est_.isStance() and !is_stance_) {
@@ -96,18 +94,16 @@ void Controller::sendCommand() {
         acc_force.segment(3 * i, 3) << 0, 0, 0;
     }
 
+    // Swap legs
+    swapLegs(Mat_lin, Mat_rot, Mat_force_weight);
+
     // linear optimization
     auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_force.rows();
     Eigen::MatrixXf opt_A(num_rows, 12);
     Eigen::MatrixXf opt_b(num_rows, 1);
     Eigen::Matrix<float, 12, 1> grf;
-    Eigen::DiagonalMatrix<float, 12> force_weight;
-    force_weight.diagonal() << 1e-3, 1e-3, 1e-3,
-                                1, 1, 1,
-                                1, 1, 1,
-                                1e-3, 1e-3, 1e-3;
-    opt_A << Mat_lin, Mat_rot, force_weight * Mat_force;
-    opt_b << acc_imu, force_weight * acc_force;
+    opt_A << Mat_lin, Mat_rot, Mat_force_weight * Mat_force;
+    opt_b << acc_imu, Mat_force_weight * acc_force;
     grf = opt_A.colPivHouseholderQr().solve(opt_b);
 
     Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
@@ -228,6 +224,29 @@ void Controller::setTrajectory(Eigen::Matrix<float, 12, 1> &p_feet_desired) {
 //        p_feet_desired[3 * i + 2] += kt_[2];
     }
     p_feet_desired[3 * 1 + 2] += kt_[2];
+
+}
+
+void Controller::swapLegs(Eigen::Matrix<float, 3, 12> &Mat_lin,
+                          Eigen::Matrix<float, 3, 12> &Mat_rot,
+                          Eigen::DiagonalMatrix<float, 12> &Mat_force_weight) {
+    if (sin(2 * M_PI * kt_[4] * time_) > 0) {
+        // case 1
+        Mat_lin.block(0, 3, 3, 3) *= 0;
+        Mat_rot.block(0, 3, 3, 3) *= 0;
+        Mat_lin.block(0, 6, 3, 3) *= 0;
+        Mat_rot.block(0, 6, 3, 3) *= 0;
+        Mat_force_weight.diagonal().segment(3, 3) << 1, 1, 1;
+        Mat_force_weight.diagonal().segment(6, 3) << 1, 1, 1;
+    } else {
+        // case 2
+        Mat_lin.block(0, 0, 3, 3) *= 0;
+        Mat_rot.block(0, 0, 3, 3) *= 0;
+        Mat_lin.block(0, 9, 3, 3) *= 0;
+        Mat_rot.block(0, 9, 3, 3) *= 0;
+        Mat_force_weight.diagonal().segment(0, 3) << 1, 1, 1;
+        Mat_force_weight.diagonal().segment(9, 3) << 1, 1, 1;
+    }
 
 }
 

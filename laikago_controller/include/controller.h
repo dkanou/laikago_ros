@@ -39,7 +39,11 @@ private:
 
     static Eigen::Matrix3f conjMatrix(const Eigen::Vector3f &vec);
 
-    void setTrajectory(Eigen::Matrix<float, 12, 1>& p_feet_desired);
+    void setTrajectory(Eigen::Matrix<float, 12, 1> &p_feet_desired);
+
+    void swapLegs(Eigen::Matrix<float, 3, 12> &Mat_lin,
+                  Eigen::Matrix<float, 3, 12> &Mat_rot,
+                  Eigen::DiagonalMatrix<float, 12> &Mat_force_weight);
 
     float time_{0};
     Kinematics kin_;
