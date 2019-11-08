@@ -36,6 +36,8 @@ void Controller::sendCommand() {
         Eigen::Vector3f foot_world = kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3);
         Mat_rot.block(0, 3 * i, 3, 3) = conjMatrix(foot_world);
     }
+//    Mat_lin.block(0, 3, 3, 3) = Eigen::Matrix3f::Zero();
+//    Mat_rot.block(0, 3, 3, 3) = Eigen::Matrix3f::Zero();
     Eigen::Matrix<float, 12, 12> Mat_force = Eigen::Matrix<float, 12, 12>::Identity();
 
     // reset in stance
@@ -58,7 +60,6 @@ void Controller::sendCommand() {
     } else {
         control_switch_weight_ = fmax(control_switch_weight_ - 2e-3, 0);
     }
-//    std::cout << control_switch_weight_ << std::endl;
 
     // acceleration
     Eigen::DiagonalMatrix<float, 6> kp_imu;
@@ -81,15 +82,12 @@ void Controller::sendCommand() {
             est_.worldState_.bodySpeed.z,
             kin_.dq_imu_;
     Eigen::Matrix<float, 6, 1> acc_imu;
-    acc_imu = kp_imu * (desired_pos_imu - pos_imu) - kd_imu * vel_imu;
+    acc_imu = fmin(time_ / 10.0, 1) * (kp_imu * (desired_pos_imu - pos_imu) - kd_imu * vel_imu);
     Eigen::Matrix<float, 12, 1> acc_force;
     acc_force = Eigen::Matrix<float, 12, 1>::Zero();
     for (int i = 0; i < 4; i++) {
         acc_force.segment(3 * i, 3) << 0, 0, 0;
     }
-//    std::cout << "desired_pos_imu: " << desired_pos_imu.transpose();
-//    std::cout << "\tpos_imu: " << pos_imu.transpose();
-//    std::cout << std::endl;
 
     // linear optimization
     auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_force.rows();
@@ -100,7 +98,6 @@ void Controller::sendCommand() {
     opt_A << Mat_lin, Mat_rot, force_weight * Mat_force;
     opt_b << acc_imu, force_weight * acc_force;
     grf = opt_A.colPivHouseholderQr().solve(opt_b);
-//    std::cout << "grf: " << grf.transpose() << std::endl;
 
     Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
     for (int i = 0; i < 4; i++) {
@@ -112,6 +109,7 @@ void Controller::sendCommand() {
 //    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
 //    feet_force = feet_force_kin;
     feet_force = (1 - control_switch_weight_) * feet_force_kin + control_switch_weight_ * feet_force_grf;
+//    feet_force = (1 - kp_[2]) * feet_force_kin + kp_[2] * feet_force_grf;
 
 //    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
 //    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
