@@ -40,8 +40,11 @@ void Controller::sendCommand() {
         Eigen::Vector3f foot_world = kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3);
         Mat_rot.block(0, 3 * i, 3, 3) = conjMatrix(foot_world);
     }
-//    Mat_lin.block(0, 3, 3, 3) = Eigen::Matrix3f::Zero();
-//    Mat_rot.block(0, 3, 3, 3) = Eigen::Matrix3f::Zero();
+    Mat_lin.block(0, 3, 3, 3) *= 0;
+    Mat_rot.block(0, 3, 3, 3) *= 0;
+    Mat_lin.block(0, 6, 3, 3) *= 0;
+    Mat_rot.block(0, 6, 3, 3) *= 0;
+
     Eigen::Matrix<float, 12, 12> Mat_force = Eigen::Matrix<float, 12, 12>::Identity();
 
     // reset in stance
@@ -98,7 +101,11 @@ void Controller::sendCommand() {
     Eigen::MatrixXf opt_A(num_rows, 12);
     Eigen::MatrixXf opt_b(num_rows, 1);
     Eigen::Matrix<float, 12, 1> grf;
-    float force_weight = 1e-3;
+    Eigen::DiagonalMatrix<float, 12> force_weight;
+    force_weight.diagonal() << 1e-3, 1e-3, 1e-3,
+                                1, 1, 1,
+                                1, 1, 1,
+                                1e-3, 1e-3, 1e-3;
     opt_A << Mat_lin, Mat_rot, force_weight * Mat_force;
     opt_b << acc_imu, force_weight * acc_force;
     grf = opt_A.colPivHouseholderQr().solve(opt_b);
@@ -111,13 +118,13 @@ void Controller::sendCommand() {
     // merge kinematics and grf control
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
 //    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
-    feet_force = feet_force_kin;
+//    feet_force = feet_force_kin;
 //    feet_force = (1 - control_switch_weight_) * feet_force_kin + control_switch_weight_ * feet_force_grf;
-//    feet_force = (1 - kp_[2]) * feet_force_kin + kp_[2] * feet_force_grf;
+    feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_grf;
 
-//    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
-//    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
-//    std::cout << std::endl;
+    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
+    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
+    std::cout << std::endl;
 
     // convert to torque
     Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
@@ -211,15 +218,17 @@ Eigen::Matrix3f Controller::conjMatrix(const Eigen::Vector3f &vec) {
 }
 
 void Controller::setTrajectory(Eigen::Matrix<float, 12, 1> &p_feet_desired) {
-    p_feet_desired[2]  += + kt_[3] * sin(2 * M_PI * kt_[4] * time_);
-    p_feet_desired[5]  += - kt_[3] * sin(2 * M_PI * kt_[4] * time_);
-    p_feet_desired[8]  += - kt_[3] * sin(2 * M_PI * kt_[4] * time_);
-    p_feet_desired[11] += + kt_[3] * sin(2 * M_PI * kt_[4] * time_);
-//    for (int i = 0; i < 4; i++) {
-//        p_feet_desired[3 * i + 0] += kt_[0];
-//        p_feet_desired[3 * i + 1] += kt_[1];
+//    p_feet_desired[2]  += + kt_[3] * sin(2 * M_PI * kt_[4] * time_);
+//    p_feet_desired[5]  += - kt_[3] * sin(2 * M_PI * kt_[4] * time_);
+//    p_feet_desired[8]  += - kt_[3] * sin(2 * M_PI * kt_[4] * time_);
+//    p_feet_desired[11] += + kt_[3] * sin(2 * M_PI * kt_[4] * time_);
+    for (int i = 0; i < 4; i++) {
+        p_feet_desired[3 * i + 0] += kt_[0];
+        p_feet_desired[3 * i + 1] += kt_[1];
 //        p_feet_desired[3 * i + 2] += kt_[2];
-//    }
+    }
+    p_feet_desired[3 * 1 + 2] += kt_[2];
+
 }
 
 
