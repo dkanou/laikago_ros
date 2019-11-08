@@ -180,8 +180,20 @@ void BodyPoseEstimator::resetState() {
 }
 
 bool BodyPoseEstimator::isStance() {
-    for (int i = 0; i < 4; i++) {
-        if (lowState.footForce[i] < high_) return false;
+    if (is_stance_) {
+        for (int i = 0; i < 4; i++) {
+            if (lowState.footForce[i] > low_) {
+                return is_stance_;
+            }
+        }
+        is_stance_ = false;
+    } else {
+        for (int i = 0; i < 4; i++) {
+            if (lowState.footForce[i] < high_) {
+                return is_stance_;
+            }
+        }
+        is_stance_ = true;
     }
-    return true;
+    return is_stance_;
 }

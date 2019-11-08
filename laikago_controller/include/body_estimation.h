@@ -32,6 +32,7 @@ private:
     Eigen::Matrix<float, 28, 18> _C;
     const float low_{10};
     const float high_{20};
+    bool is_stance_{false};
     ros::Publisher worldState_pub_;
 };
 

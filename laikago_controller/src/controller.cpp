@@ -52,9 +52,17 @@ void Controller::sendCommand() {
         std::cout << "left in air" << std::endl;
     }
 
+    // smooth control transition
+    if (is_stance_) {
+        control_switch_weight_ = fmin(control_switch_weight_ + 2e-3, 1);
+    } else {
+        control_switch_weight_ = fmax(control_switch_weight_ - 2e-3, 0);
+    }
+//    std::cout << control_switch_weight_ << std::endl;
+
     // acceleration
     Eigen::DiagonalMatrix<float, 6> kp_imu;
-    kp_imu.diagonal() << kp_[0], kp_[0], kp_[0]*10, kp_[1], kp_[1], kp_[1];
+    kp_imu.diagonal() << 700, 700, 7000, 100, 100, 100;
     Eigen::DiagonalMatrix<float, 6> kd_imu;
     kd_imu.diagonal() << 0, 0, 0, 0, 0, 0;
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
@@ -103,12 +111,11 @@ void Controller::sendCommand() {
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
 //    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
 //    feet_force = feet_force_kin;
-    feet_force = (1 - kp_[2]) * feet_force_kin + kp_[2] * feet_force_grf;
+    feet_force = (1 - control_switch_weight_) * feet_force_kin + control_switch_weight_ * feet_force_grf;
 
-
-    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
-    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
-    std::cout << std::endl;
+//    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
+//    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
+//    std::cout << std::endl;
 
     // convert to torque
     Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();

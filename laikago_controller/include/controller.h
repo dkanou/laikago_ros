@@ -48,6 +48,7 @@ private:
     float kd_[3]{0, 0, 0};
     bool is_stance_{false};
     float yaw_offset_{0};
+    float control_switch_weight_{0};
 };
 
 
