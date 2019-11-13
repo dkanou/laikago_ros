@@ -71,6 +71,8 @@ int main(int argc, char *argv[]) {
         controller.sendCommand();
         Kinematics::setLowCmd(SendLowROS);
 
+        std::cout << ros::Time::now().toSec() - begin_time - sim_time;
+
         // publish state and cmd
         lowState_pub.publish(lowState);
         highState_pub.publish(highState);

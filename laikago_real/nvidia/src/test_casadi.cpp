@@ -1,11 +1,8 @@
 #include <casadi/casadi.hpp>
 #include <Eigen/Dense>
 #include "../../../laikago_controller/include/qp_solver.h"
-#include "../../../laikago_controller/include/kinematics.h"
 
 using namespace casadi;
-
-bool Kinematics::sim = false;
 
 int main() {
     Eigen::MatrixXf A = Eigen::MatrixXf::Identity(18, 12);

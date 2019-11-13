@@ -1,16 +1,18 @@
 #include "../include/qp_solver.h"
 
-QpSolver::QpSolver(): opti_("conic") {
+QpSolver::QpSolver() : opti_("conic") {
     x_ = opti_.variable(12, 1);
     A_ = opti_.parameter(18, 12);
     b_ = opti_.parameter(18, 1);
     opti_.minimize(dot(mtimes(A_, x_) - b_, mtimes(A_, x_) - b_));
 
-    double mu = 0.4;
+    double mu = 0.3;
     for (int i = 0; i < 4; i++) {
-        opti_.subject_to(x_(3 * i + 2) <= 0);
-        opti_.subject_to(fabs(x_(3 * i + 0)) <= -mu * x_(3 * i + 2));
-        opti_.subject_to(fabs(x_(3 * i + 1)) <= -mu * x_(3 * i + 2));
+        opti_.subject_to(x_(3 * i + 2) >= 0);
+        opti_.subject_to(x_(3 * i + 0) <= mu * x_(3 * i + 2));
+        opti_.subject_to(x_(3 * i + 1) <= mu * x_(3 * i + 2));
+        opti_.subject_to(-x_(3 * i + 0) <= mu * x_(3 * i + 2));
+        opti_.subject_to(-x_(3 * i + 1) <= mu * x_(3 * i + 2));
     }
 
     Dict opts;
@@ -29,7 +31,9 @@ Eigen::Matrix<float, 12, 1> QpSolver::solve(Eigen::MatrixXf &A, Eigen::MatrixXf 
     opti_.set_value(b_, dm_b);
 
     auto sol = opti_.solve();
-    Eigen::Map<Eigen::VectorXd> res_x(sol.value(x_).ptr(), x_.rows());
-    return res_x.cast<float>();
+    auto vector_x = static_cast<std::vector<float>>(sol.value(x_));
+    Eigen::Matrix<float, 12, 1> res_x(vector_x.data());
+
+    return res_x;
 }
 

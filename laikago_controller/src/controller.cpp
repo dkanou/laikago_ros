@@ -75,7 +75,7 @@ void Controller::sendCommand() {
 
     // acceleration
     Eigen::DiagonalMatrix<float, 6> kp_imu;
-    kp_imu.diagonal() << 700*(1-kt_[0])*0, 700*(1-kt_[0])*0, 7000, 300 + kt_[1], 300 + kt_[1], 300 + kt_[1];
+    kp_imu.diagonal() << 700 * 0, 700 * 0, 7000, 300, 300, 300;
     Eigen::DiagonalMatrix<float, 6> kd_imu;
     kd_imu.diagonal() << 0, 0, 0, 0, 0, 0;
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
@@ -108,46 +108,56 @@ void Controller::sendCommand() {
     auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_force.rows();
     Eigen::MatrixXf opt_A(num_rows, 12);
     Eigen::MatrixXf opt_b(num_rows, 1);
-    Eigen::Matrix<float, 12, 1> grf;
+    Eigen::Matrix<float, 12, 1> grf_ls;
     opt_A << Mat_lin, Mat_rot, Mat_force_weight * Mat_force;
     opt_b << acc_imu, Mat_force_weight * acc_force;
-    grf = opt_A.colPivHouseholderQr().solve(opt_b);
+    grf_ls = opt_A.colPivHouseholderQr().solve(opt_b);
+    Eigen::Matrix<float, 12, 1> grf_qp = qp_solver_.solve(opt_A, opt_b);
+
+    std::cout << " grf_ls: " << grf_ls.transpose();
+    std::cout << " grf_qp: " << grf_qp.transpose();
+    std::cout << std::endl;
 
     Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
     for (int i = 0; i < 4; i++) {
-        feet_force_grf.segment(3 * i, 3) = kin_.R_imu_.transpose() * -grf.segment(3 * i, 3);
+        feet_force_grf.segment(3 * i, 3) = kin_.R_imu_.transpose() * -grf_qp.segment(3 * i, 3);
     }
 
     // mix walking force
     Eigen::Matrix<float, 12, 1> feet_force_walk = Eigen::Matrix<float, 12, 1>::Zero();
     // todo: change the swing leg trajectory
-    if (sin(2 * M_PI * kt_[4] * time_) > 0) {
-        feet_force_walk.segment(0, 3) = feet_force_grf.segment(0, 3);
-        feet_force_walk.segment(9, 3) = feet_force_grf.segment(9, 3);
-        feet_force_walk.segment(3, 3) = feet_force_kin.segment(3, 3);
-        feet_force_walk.segment(6, 3) = feet_force_kin.segment(6, 3);
-        feet_force_walk[3+2] = 0;
-        feet_force_walk[6+2] = 0;
-    } else {
-        feet_force_walk.segment(3, 3) = feet_force_grf.segment(3, 3);
-        feet_force_walk.segment(6, 3) = feet_force_grf.segment(6, 3);
-        feet_force_walk.segment(0, 3) = feet_force_kin.segment(0, 3);
+//    if (sin(2 * M_PI * kt_[4] * time_) > 0) {
+//        feet_force_walk.segment(0, 3) = feet_force_grf.segment(0, 3);
+//        feet_force_walk.segment(9, 3) = feet_force_grf.segment(9, 3);
+//        feet_force_walk.segment(3, 3) = feet_force_kin.segment(3, 3);
+//        feet_force_walk.segment(6, 3) = feet_force_kin.segment(6, 3);
+//        feet_force_walk[3 + 2] = 0;
+//        feet_force_walk[6 + 2] = 0;
+//    } else {
+//        feet_force_walk.segment(3, 3) = feet_force_grf.segment(3, 3);
+//        feet_force_walk.segment(6, 3) = feet_force_grf.segment(6, 3);
+//        feet_force_walk.segment(0, 3) = feet_force_kin.segment(0, 3);
+//        feet_force_walk.segment(9, 3) = feet_force_kin.segment(9, 3);
+//        feet_force_walk[0 + 2] = 0;
+//        feet_force_walk[9 + 2] = 0;
+//    }
+    feet_force_walk = feet_force_grf;
+    if (sin(2 * M_PI * kt_[4] * time_) >= 0) {
         feet_force_walk.segment(9, 3) = feet_force_kin.segment(9, 3);
-        feet_force_walk[0+2] = 0;
-        feet_force_walk[9+2] = 0;
+//        feet_force_walk[9 + 2] = kt_[2];
+        feet_force_walk[9 + 2] = 5;
     }
-
     // merge kinematics and grf control
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
 //    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
 //    feet_force = feet_force_kin;
 //    feet_force = (1 - control_switch_weight_) * feet_force_kin + control_switch_weight_ * feet_force_grf;
-    feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_grf;
-//    feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_walk;
+//    feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_grf;
+    feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_walk;
 
-    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
-    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
-    std::cout << std::endl;
+//    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
+//    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
+//    std::cout << std::endl;
 
     // convert to torque
     Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
@@ -257,20 +267,17 @@ void Controller::setTrajectory(Eigen::Matrix<float, 12, 1> &p_feet_desired) {
 void Controller::swapLegs(Eigen::Matrix<float, 3, 12> &Mat_lin,
                           Eigen::Matrix<float, 3, 12> &Mat_rot,
                           Eigen::DiagonalMatrix<float, 12> &Mat_force_weight) {
-//    Mat_lin.block(0, 0, 2, 2) *= 1e-3;
-//    Mat_lin.block(0, 3, 2, 2) *= 1e-3;
-//    Mat_lin.block(0, 6, 2, 2) *= 1e-3;
-//    Mat_lin.block(0, 9, 2, 2) *= 1e-3;
+//    Mat_lin.block(0, 0, 2, 12) *= pow(10, kt_[3]);
+    Mat_lin.block(0, 0, 2, 12) *= 1e-1;
 
-    Mat_lin.block(0, 3, 3, 3) *= 1e-5;
-    Mat_rot.block(0, 3, 3, 3) *= 1e-5;
-    Mat_force_weight.diagonal().segment(3, 3) *= 1e5;
+    if (sin(2 * M_PI * kt_[4] * time_) > 0) {
+        Mat_lin.block(0, 9, 3, 3) *= 1e-3;
+        Mat_rot.block(0, 9, 3, 3) *= 1e-3;
+        Mat_force_weight.diagonal().segment(9, 3) *= 1e3;
+    }
 
 //    if (sin(2 * M_PI * kt_[4] * time_) > 0) {
 //        // case 1
-//        Mat_lin.block(0, 0, 2, 2) *= 1e-3;
-//        Mat_lin.block(0, 9, 2, 2) *= 1e-3;
-//
 //        Mat_lin.block(0, 3, 3, 3) *= 1e-3;
 //        Mat_rot.block(0, 3, 3, 3) *= 1e-3;
 //        Mat_lin.block(0, 6, 3, 3) *= 1e-3;
@@ -279,9 +286,6 @@ void Controller::swapLegs(Eigen::Matrix<float, 3, 12> &Mat_lin,
 //        Mat_force_weight.diagonal().segment(6, 3) *= 1e3;
 //    } else {
 //        // case 2
-//        Mat_lin.block(0, 3, 2, 2) *= 1e-3;
-//        Mat_lin.block(0, 6, 2, 2) *= 1e-3;
-//
 //        Mat_lin.block(0, 0, 3, 3) *= 1e-3;
 //        Mat_rot.block(0, 0, 3, 3) *= 1e-3;
 //        Mat_lin.block(0, 9, 3, 3) *= 1e-3;

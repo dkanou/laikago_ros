@@ -1,5 +1,7 @@
 #include "../include/kinematics.h"
 
+bool Kinematics::sim = true;
+
 void Kinematics::update() {
     updateEigenState();
     updateKinematics();

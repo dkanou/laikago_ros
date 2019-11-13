@@ -3,10 +3,11 @@
 
 #include <casadi/casadi.hpp>
 #include <Eigen/Dense>
-#include "laikago_msgs/GainParam.h"
 #include "body.h"
-#include "kinematics.h"
 #include "body_estimation.h"
+#include "kinematics.h"
+#include "laikago_msgs/GainParam.h"
+#include "qp_solver.h"
 
 using namespace casadi;
 using laikago_model::lowCmd;
@@ -48,6 +49,7 @@ private:
     float time_{0};
     Kinematics kin_;
     BodyPoseEstimator est_;
+    QpSolver qp_solver_;
     ros::NodeHandle &n_;
     ros::Subscriber param_sub;
     float kp_[3]{0, 0, 0};
