@@ -22,22 +22,17 @@ void Controller::sendCommand() {
 
     // force from feet kinematics
     Eigen::Matrix<float, 12, 1> p_feet_desired;
-    p_feet_desired.segment(0, 3) << +0.20, -0.14, -0.40;
-    p_feet_desired.segment(3, 3) << +0.20, +0.14, -0.40;
-    p_feet_desired.segment(6, 3) << -0.22, -0.14, -0.40;
-    p_feet_desired.segment(9, 3) << -0.22, +0.14, -0.40;
-    setTrajectory(p_feet_desired);
+    p_feet_desired.segment(0, 3) << +0.20, -0.16, -0.40;
+    p_feet_desired.segment(3, 3) << +0.20, +0.16, -0.40;
+    p_feet_desired.segment(6, 3) << -0.22, -0.16, -0.40;
+    p_feet_desired.segment(9, 3) << -0.22, +0.16, -0.40;
 
     Eigen::Matrix<float, 12, 1> p_feet_error = Eigen::Matrix<float, 12, 1>::Zero();
     Eigen::Matrix<float, 12, 1> feet_force_kin = Eigen::Matrix<float, 12, 1>::Zero();
-//    for (int i = 0; i < 4; i++) {
-//        p_feet_error.segment(3 * i, 3) =
-//                p_feet_desired.segment(3 * i, 3) - kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3);
-//        feet_force_kin.segment(3 * i, 3) =
-//                fmin(time_ / 10.0, 1) * 1500 * kin_.R_imu_.transpose() * p_feet_error.segment(3 * i, 3);
-//    }
+
     p_feet_error = p_feet_desired - kin_.p_feet_;
-    feet_force_kin = fmin(time_ / 10.0, 1) * 1500 * p_feet_error;
+    double kp_kin = 1500;
+    feet_force_kin = fmin(time_ / 10.0, 1) * kp_kin * p_feet_error;
 
     // matrix of feet force to acceleration
     Eigen::Matrix<float, 3, 12> Mat_lin;
@@ -67,15 +62,16 @@ void Controller::sendCommand() {
     }
 
     // smooth control transition
+    double switch_rate = 2e-3;
     if (is_stance_) {
-        control_switch_weight_ = fmin(control_switch_weight_ + 2e-3, 1);
+        control_switch_weight_ = fmin(control_switch_weight_ + switch_rate, 1);
     } else {
-        control_switch_weight_ = fmax(control_switch_weight_ - 2e-3, 0);
+        control_switch_weight_ = fmax(control_switch_weight_ - switch_rate, 0);
     }
 
     // acceleration
     Eigen::DiagonalMatrix<float, 6> kp_imu;
-    kp_imu.diagonal() << 700 * 0, 700 * 0, 7000, 300, 300, 300;
+    kp_imu.diagonal() << 700 * 1e-1 * kt_[3], 700 * 1e-1 * kt_[3], 7000, 300, 300, 300;
     Eigen::DiagonalMatrix<float, 6> kd_imu;
     kd_imu.diagonal() << 0, 0, 0, 0, 0, 0;
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
@@ -97,67 +93,50 @@ void Controller::sendCommand() {
     acc_imu = fmin(time_ / 10.0, 1) * (kp_imu * (desired_pos_imu - pos_imu) - kd_imu * vel_imu);
     Eigen::Matrix<float, 12, 1> acc_force;
     acc_force = Eigen::Matrix<float, 12, 1>::Zero();
+    Eigen::Matrix<float, 12, 1> p_feet_desired_g = p_feet_desired;
     for (int i = 0; i < 4; i++) {
-        acc_force.segment(3 * i, 3) << 0, 0, 0;
+//        acc_force.segment(3 * i, 3) << 0, 0, 0;
+        p_feet_desired_g(3 * i + 2) = -0.35;
+        acc_force.segment(3 * i, 3) = fmin(time_ / 10.0, 1) * -kp_kin * kin_.R_imu_ *
+                                      (p_feet_desired_g.segment(3 * i, 3) - kin_.p_feet_.segment(3 * i, 3));
     }
-
-    // Swap legs
-    swapLegs(Mat_lin, Mat_rot, Mat_force_weight);
 
     // linear optimization
     auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_force.rows();
     Eigen::MatrixXf opt_A(num_rows, 12);
     Eigen::MatrixXf opt_b(num_rows, 1);
-    Eigen::Matrix<float, 12, 1> grf_ls;
-    opt_A << Mat_lin, Mat_rot, Mat_force_weight * Mat_force;
-    opt_b << acc_imu, Mat_force_weight * acc_force;
-    grf_ls = opt_A.colPivHouseholderQr().solve(opt_b);
-    Eigen::Matrix<float, 12, 1> grf_qp = qp_solver_.solve(opt_A, opt_b);
+    std::vector<Eigen::MatrixXf> vec_mat;
 
-    std::cout << " grf_ls: " << grf_ls.transpose();
-    std::cout << " grf_qp: " << grf_qp.transpose();
-    std::cout << std::endl;
+    vec_mat = swapLegs(0, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
+    opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
+    opt_b << acc_imu, vec_mat[3] * acc_force;
+    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_solver_.solve(opt_A, opt_b);
+//    grf_qp_1.segment(0, 3) = acc_force.segment(0, 3);
+    grf_qp_1.segment(9, 3) = acc_force.segment(9, 3);
+
+    vec_mat = swapLegs(1, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
+    opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
+    opt_b << acc_imu, vec_mat[3] * acc_force;
+    Eigen::Matrix<float, 12, 1> grf_qp_2 = qp_solver_.solve(opt_A, opt_b);
+
+    // swap legs
+    double delta_transition = 0.1;
+    double alpha_transition = tanh(sin(2 * M_PI * kt_[4] * time_) / delta_transition) / tanh(1 / delta_transition);
+    alpha_transition = (alpha_transition + 1) / 2.0;
+    Eigen::Matrix<float, 12, 1> grf_qp;
+    grf_qp = alpha_transition * grf_qp_1 + (1 - alpha_transition) * grf_qp_2;
+//    grf_qp = grf_qp_1;
 
     Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
     for (int i = 0; i < 4; i++) {
         feet_force_grf.segment(3 * i, 3) = kin_.R_imu_.transpose() * -grf_qp.segment(3 * i, 3);
     }
 
-    // mix walking force
-    Eigen::Matrix<float, 12, 1> feet_force_walk = Eigen::Matrix<float, 12, 1>::Zero();
-    // todo: change the swing leg trajectory
-//    if (sin(2 * M_PI * kt_[4] * time_) > 0) {
-//        feet_force_walk.segment(0, 3) = feet_force_grf.segment(0, 3);
-//        feet_force_walk.segment(9, 3) = feet_force_grf.segment(9, 3);
-//        feet_force_walk.segment(3, 3) = feet_force_kin.segment(3, 3);
-//        feet_force_walk.segment(6, 3) = feet_force_kin.segment(6, 3);
-//        feet_force_walk[3 + 2] = 0;
-//        feet_force_walk[6 + 2] = 0;
-//    } else {
-//        feet_force_walk.segment(3, 3) = feet_force_grf.segment(3, 3);
-//        feet_force_walk.segment(6, 3) = feet_force_grf.segment(6, 3);
-//        feet_force_walk.segment(0, 3) = feet_force_kin.segment(0, 3);
-//        feet_force_walk.segment(9, 3) = feet_force_kin.segment(9, 3);
-//        feet_force_walk[0 + 2] = 0;
-//        feet_force_walk[9 + 2] = 0;
-//    }
-    feet_force_walk = feet_force_grf;
-    if (sin(2 * M_PI * kt_[4] * time_) >= 0) {
-        feet_force_walk.segment(9, 3) = feet_force_kin.segment(9, 3);
-//        feet_force_walk[9 + 2] = kt_[2];
-        feet_force_walk[9 + 2] = 5;
-    }
     // merge kinematics and grf control
     Eigen::Matrix<float, 12, 1> feet_force = Eigen::Matrix<float, 12, 1>::Zero();
-//    feet_force = time_ < 2.f ? feet_force_kin : feet_force_grf;
 //    feet_force = feet_force_kin;
 //    feet_force = (1 - control_switch_weight_) * feet_force_kin + control_switch_weight_ * feet_force_grf;
-//    feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_grf;
-    feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_walk;
-
-//    std::cout << "feet_force_kin: " << feet_force_kin.transpose();
-//    std::cout << "feet_force_grf: " << feet_force_grf.transpose();
-//    std::cout << std::endl;
+    feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_grf;
 
     // convert to torque
     Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
@@ -168,7 +147,6 @@ void Controller::sendCommand() {
         motor_torque[i * 3 + 0] += torque_hip_gravity[i];
     }
     setTorque(motor_torque);
-//    std::cout << time_ << std::endl;
 }
 
 void Controller::sendCommandPD() {
@@ -251,48 +229,35 @@ Eigen::Matrix3f Controller::conjMatrix(const Eigen::Vector3f &vec) {
 }
 
 void Controller::setTrajectory(Eigen::Matrix<float, 12, 1> &p_feet_desired) {
-//    p_feet_desired[2]  += + kt_[3] * sin(2 * M_PI * kt_[4] * time_);
-//    p_feet_desired[5]  += - kt_[3] * sin(2 * M_PI * kt_[4] * time_);
-//    p_feet_desired[8]  += - kt_[3] * sin(2 * M_PI * kt_[4] * time_);
-//    p_feet_desired[11] += + kt_[3] * sin(2 * M_PI * kt_[4] * time_);
-//    for (int i = 0; i < 4; i++) {
-//        p_feet_desired[3 * i + 0] += kt_[0];
-//        p_feet_desired[3 * i + 1] += kt_[1];
-//        p_feet_desired[3 * i + 2] += kt_[2];
-//    }
-//    p_feet_desired[3 * 1 + 2] += kt_[2];
 
 }
 
-void Controller::swapLegs(Eigen::Matrix<float, 3, 12> &Mat_lin,
-                          Eigen::Matrix<float, 3, 12> &Mat_rot,
-                          Eigen::DiagonalMatrix<float, 12> &Mat_force_weight) {
-//    Mat_lin.block(0, 0, 2, 12) *= pow(10, kt_[3]);
+std::vector<Eigen::MatrixXf>
+Controller::swapLegs(int phase,
+                     Eigen::Matrix<float, 3, 12> Mat_lin,
+                     Eigen::Matrix<float, 3, 12> Mat_rot,
+                     Eigen::Matrix<float, 12, 12> Mat_force,
+                     Eigen::DiagonalMatrix<float, 12> Mat_force_weight) {
     Mat_lin.block(0, 0, 2, 12) *= 1e-1;
 
-    if (sin(2 * M_PI * kt_[4] * time_) > 0) {
+    if (phase == 0) {
+//        Mat_lin.block(0, 0, 3, 3) *= 1e-3;
+//        Mat_rot.block(0, 0, 3, 3) *= 1e-3;
+//        Mat_force_weight.diagonal().segment(0, 3) *= 1e3;
         Mat_lin.block(0, 9, 3, 3) *= 1e-3;
         Mat_rot.block(0, 9, 3, 3) *= 1e-3;
         Mat_force_weight.diagonal().segment(9, 3) *= 1e3;
-    }
-
-//    if (sin(2 * M_PI * kt_[4] * time_) > 0) {
-//        // case 1
+    } else if (phase == 1) {
 //        Mat_lin.block(0, 3, 3, 3) *= 1e-3;
 //        Mat_rot.block(0, 3, 3, 3) *= 1e-3;
+//        Mat_force_weight.diagonal().segment(3, 3) *= 1e3;
 //        Mat_lin.block(0, 6, 3, 3) *= 1e-3;
 //        Mat_rot.block(0, 6, 3, 3) *= 1e-3;
-//        Mat_force_weight.diagonal().segment(3, 3) *= 1e3;
 //        Mat_force_weight.diagonal().segment(6, 3) *= 1e3;
-//    } else {
-//        // case 2
-//        Mat_lin.block(0, 0, 3, 3) *= 1e-3;
-//        Mat_rot.block(0, 0, 3, 3) *= 1e-3;
-//        Mat_lin.block(0, 9, 3, 3) *= 1e-3;
-//        Mat_rot.block(0, 9, 3, 3) *= 1e-3;
-//        Mat_force_weight.diagonal().segment(0, 3) *= 1e3;
-//        Mat_force_weight.diagonal().segment(9, 3) *= 1e3;
-//    }
+    } else {
+        std::cerr << "wrong phase: " << phase << std::endl;
+    }
+    return {Mat_lin, Mat_rot, Mat_force, Mat_force_weight};
 }
 
 

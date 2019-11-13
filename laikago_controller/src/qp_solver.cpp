@@ -1,4 +1,5 @@
 #include "../include/qp_solver.h"
+#include <ros/ros.h>
 
 QpSolver::QpSolver() : opti_("conic") {
     x_ = opti_.variable(12, 1);
