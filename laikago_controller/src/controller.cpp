@@ -111,13 +111,15 @@ void Controller::sendCommand() {
     opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
     opt_b << acc_imu, vec_mat[3] * acc_force;
     Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_solver_.solve(opt_A, opt_b);
-//    grf_qp_1.segment(0, 3) = acc_force.segment(0, 3);
+    grf_qp_1.segment(0, 3) = acc_force.segment(0, 3);
     grf_qp_1.segment(9, 3) = acc_force.segment(9, 3);
 
     vec_mat = swapLegs(1, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
     opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
     opt_b << acc_imu, vec_mat[3] * acc_force;
     Eigen::Matrix<float, 12, 1> grf_qp_2 = qp_solver_.solve(opt_A, opt_b);
+    grf_qp_2.segment(3, 3) = acc_force.segment(3, 3);
+    grf_qp_2.segment(6, 3) = acc_force.segment(6, 3);
 
     // swap legs
     double delta_transition = 0.1;
@@ -241,19 +243,19 @@ Controller::swapLegs(int phase,
     Mat_lin.block(0, 0, 2, 12) *= 1e-1;
 
     if (phase == 0) {
-//        Mat_lin.block(0, 0, 3, 3) *= 1e-3;
-//        Mat_rot.block(0, 0, 3, 3) *= 1e-3;
-//        Mat_force_weight.diagonal().segment(0, 3) *= 1e3;
+        Mat_lin.block(0, 0, 3, 3) *= 1e-3;
+        Mat_rot.block(0, 0, 3, 3) *= 1e-3;
+        Mat_force_weight.diagonal().segment(0, 3) *= 1e3;
         Mat_lin.block(0, 9, 3, 3) *= 1e-3;
         Mat_rot.block(0, 9, 3, 3) *= 1e-3;
         Mat_force_weight.diagonal().segment(9, 3) *= 1e3;
     } else if (phase == 1) {
-//        Mat_lin.block(0, 3, 3, 3) *= 1e-3;
-//        Mat_rot.block(0, 3, 3, 3) *= 1e-3;
-//        Mat_force_weight.diagonal().segment(3, 3) *= 1e3;
-//        Mat_lin.block(0, 6, 3, 3) *= 1e-3;
-//        Mat_rot.block(0, 6, 3, 3) *= 1e-3;
-//        Mat_force_weight.diagonal().segment(6, 3) *= 1e3;
+        Mat_lin.block(0, 3, 3, 3) *= 1e-3;
+        Mat_rot.block(0, 3, 3, 3) *= 1e-3;
+        Mat_force_weight.diagonal().segment(3, 3) *= 1e3;
+        Mat_lin.block(0, 6, 3, 3) *= 1e-3;
+        Mat_rot.block(0, 6, 3, 3) *= 1e-3;
+        Mat_force_weight.diagonal().segment(6, 3) *= 1e3;
     } else {
         std::cerr << "wrong phase: " << phase << std::endl;
     }
