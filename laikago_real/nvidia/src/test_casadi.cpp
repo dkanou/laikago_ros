@@ -10,11 +10,19 @@ int main(int argc, char *argv[]) {
     ros::NodeHandle n;
     Eigen::MatrixXf A = Eigen::MatrixXf::Identity(18, 12);
     Eigen::MatrixXf b = Eigen::MatrixXf::Zero(18, 1);
+    b(0) = 1;
     QpSolver qp_solver;
-    for (int i = 0; i < 1e3; i++) {
-        Eigen::Matrix<float, 12, 1> res_x = qp_solver.solve(A, b);
-    }
+    Eigen::Matrix<float, 12, 1> res_x;
+    for (int i = 0; i <1e3; i++) {
+        res_x = qp_solver.solve(A, b);
 //    std::cout << 0 << " " << res_x.transpose() << std::endl;
+    }
+
+    QpLow qp_low;
+    for (int i = 0; i <1e3; i++){
+        res_x = qp_low.solve(A, b);
+//        std::cout << 0 << " " << res_x.transpose() << std::endl;
+    }
 
     return 0;
 }
