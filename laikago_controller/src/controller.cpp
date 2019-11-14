@@ -73,7 +73,7 @@ void Controller::sendCommand() {
     Eigen::DiagonalMatrix<float, 6> kp_imu;
     kp_imu.diagonal() << 700 * 1e-1 * kt_[3], 700 * 1e-1 * kt_[3], 7000, 300, 300, 300;
     Eigen::DiagonalMatrix<float, 6> kd_imu;
-    kd_imu.diagonal() << 0, 0, 0, 0, 0, 0;
+    kd_imu.diagonal() << kt_[2], kt_[2], 0, 0, 0, 0;
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
     desired_pos_imu << 0, 0, 0.4,
             0 + kp_[0] * M_PI / 180,
@@ -85,8 +85,8 @@ void Controller::sendCommand() {
             est_.worldState_.bodyPosition.z,
             kin_.q_imu_;
     Eigen::Matrix<float, 6, 1> vel_imu;
-    vel_imu << est_.worldState_.bodySpeed.x,
-            est_.worldState_.bodySpeed.y,
+    vel_imu << est_.worldState_.bodySpeed.x - kt_[0],
+            est_.worldState_.bodySpeed.y - kt_[1],
             est_.worldState_.bodySpeed.z,
             kin_.dq_imu_;
     Eigen::Matrix<float, 6, 1> acc_imu;
@@ -96,7 +96,7 @@ void Controller::sendCommand() {
     Eigen::Matrix<float, 12, 1> p_feet_desired_g = p_feet_desired;
     for (int i = 0; i < 4; i++) {
 //        acc_force.segment(3 * i, 3) << 0, 0, 0;
-        p_feet_desired_g(3 * i + 2) = -0.35;
+        p_feet_desired_g(3 * i + 2) = -0.33;
         acc_force.segment(3 * i, 3) = fmin(time_ / 10.0, 1) * -kp_kin * kin_.R_imu_ *
                                       (p_feet_desired_g.segment(3 * i, 3) - kin_.p_feet_.segment(3 * i, 3));
     }
@@ -122,7 +122,7 @@ void Controller::sendCommand() {
     grf_qp_2.segment(6, 3) = acc_force.segment(6, 3);
 
     // swap legs
-    double delta_transition = 0.1;
+    double delta_transition = 0.2;
     double alpha_transition = tanh(sin(2 * M_PI * kt_[4] * time_) / delta_transition) / tanh(1 / delta_transition);
     alpha_transition = (alpha_transition + 1) / 2.0;
     Eigen::Matrix<float, 12, 1> grf_qp;
