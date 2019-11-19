@@ -16,6 +16,10 @@ void Kinematics::updateEigenState() {
                                   lowState.imu.quaternion[2],
                                   lowState.imu.quaternion[3]);
     R_imu_ = quaternion.toRotationMatrix();
+    float yaw = lowState.imu.rpy[2] * M_PI / 180.0f;
+    R_yaw_ << cos(yaw), -sin(yaw), 0,
+            sin(yaw), cos(yaw), 0,
+            0, 0, 1;
     for (int i = 0; i < 3; i++) {
         q_imu_[i] = lowState.imu.rpy[i] * M_PI / 180.0f;
         dq_imu_[i] = lowState.imu.gyroscope[i];
@@ -62,7 +66,7 @@ void Kinematics::updateFootForce() {
 void Kinematics::setLowState(const laikago_msgs::LowState &RecvLowROS) {
     lowState.imu = RecvLowROS.imu;
     for (int i = 0; i < 12; i++) {
-        lowState.motorState[i] = RecvLowROS.motorState[i+1];
+        lowState.motorState[i] = RecvLowROS.motorState[i + 1];
     }
     lowState.footForce = RecvLowROS.footForce;
     lowState.tick = RecvLowROS.tick;
@@ -72,6 +76,6 @@ void Kinematics::setLowState(const laikago_msgs::LowState &RecvLowROS) {
 
 void Kinematics::setLowCmd(laikago_msgs::LowCmd &SendLowROS) {
     for (int i = 0; i < 12; i++) {
-        SendLowROS.motorCmd[i+1] = lowCmd.motorCmd[i];
+        SendLowROS.motorCmd[i + 1] = lowCmd.motorCmd[i];
     }
 }

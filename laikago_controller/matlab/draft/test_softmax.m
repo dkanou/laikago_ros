@@ -7,10 +7,11 @@ figure(1)
 plot(t, [y0; y1])
 
 
-t2 = 0:1e-3:1;
+t2 = 0:1e-3:2;
 w2 = 1.3;
 y2 = sin(2*pi*w2*t2);
-delta = 0.1;
+y22 = sin(2*pi*(w2*t2-0.1));
+delta = 0.2;
 delta2 = 0.2;
 y3 = (1/atan(1/delta))*atan(sin(2*pi*t2*w2)/delta);
 y4 = (1/tanh(1/delta2))*tanh(sin(2*pi*t2*w2)/delta2);
@@ -18,7 +19,7 @@ y4 = (1/tanh(1/delta2))*tanh(sin(2*pi*t2*w2)/delta2);
 figure(2)
 plot(t2, y2)
 hold on
-plot(t2, sign(y2))
+plot(t2, [sign(y2); y22])
 plot(t2, [y3; y4])
 hold off
 grid on

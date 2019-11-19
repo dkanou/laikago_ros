@@ -44,6 +44,7 @@ public:
     Eigen::Matrix<float, 3, 1> q_imu_;
     Eigen::Matrix<float, 3, 1> dq_imu_;
     Eigen::Matrix<float, 3, 3> R_imu_;
+    Eigen::Matrix<float, 3, 3> R_yaw_;
     Eigen::Matrix<float, 12, 1> q_motor_;
     Eigen::Matrix<float, 12, 1> dq_motor_;
     Eigen::Matrix<float, 12, 1> p_feet_;

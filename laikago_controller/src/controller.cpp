@@ -71,9 +71,9 @@ void Controller::sendCommand() {
 
     // acceleration
     Eigen::DiagonalMatrix<float, 6> kp_imu;
-    kp_imu.diagonal() << 700 * 1e-1 * kt_[3], 700 * 1e-1 * kt_[3], 7000, 300, 300, 300;
+    kp_imu.diagonal() << 700 * 0, 700 * 0, 7000, 300, 300, 300;
     Eigen::DiagonalMatrix<float, 6> kd_imu;
-    kd_imu.diagonal() << kt_[2], kt_[2], 0, 0, 0, 0;
+    kd_imu.diagonal() << 30 + kt_[2], 30 + kt_[2], 0, 0, 0, 0.5 + kt_[3];
     Eigen::Matrix<float, 6, 1> desired_pos_imu;
     desired_pos_imu << 0, 0, 0.4,
             0 + kp_[0] * M_PI / 180,
@@ -85,21 +85,37 @@ void Controller::sendCommand() {
             est_.worldState_.bodyPosition.z,
             kin_.q_imu_;
     Eigen::Matrix<float, 6, 1> vel_imu;
-    vel_imu << est_.worldState_.bodySpeed.x - kt_[0],
-            est_.worldState_.bodySpeed.y - kt_[1],
+    vel_imu << est_.worldState_.bodySpeed.x,
+            est_.worldState_.bodySpeed.y,
             est_.worldState_.bodySpeed.z,
             kin_.dq_imu_;
+    Eigen::Matrix<float, 3, 1> bodySpeed_offset;
+    bodySpeed_offset << 0.05 + kt_[0], 0.06 + kt_[1], 0;
+    vel_imu.segment(0, 3) += kin_.R_yaw_ * bodySpeed_offset;
     Eigen::Matrix<float, 6, 1> acc_imu;
     acc_imu = fmin(time_ / 10.0, 1) * (kp_imu * (desired_pos_imu - pos_imu) - kd_imu * vel_imu);
-    Eigen::Matrix<float, 12, 1> acc_force;
-    acc_force = Eigen::Matrix<float, 12, 1>::Zero();
+    Eigen::Matrix<float, 12, 1> acc_force = Eigen::Matrix<float, 12, 1>::Zero();
     Eigen::Matrix<float, 12, 1> p_feet_desired_g = p_feet_desired;
     for (int i = 0; i < 4; i++) {
 //        acc_force.segment(3 * i, 3) << 0, 0, 0;
-        p_feet_desired_g(3 * i + 2) = -0.33;
+        Eigen::Matrix<float, 3, 1> p_feet_delta;
+        p_feet_delta << est_.worldState_.bodySpeed.x * (0.1 + kd_[0]),
+                est_.worldState_.bodySpeed.y * (0.2 + kd_[1]),
+                0.07;
+        //todo: be consistent with the use of R_imu and R_yaw
+        p_feet_desired_g.segment(3 * i, 3) += kin_.R_yaw_.transpose() * p_feet_delta;
         acc_force.segment(3 * i, 3) = fmin(time_ / 10.0, 1) * -kp_kin * kin_.R_imu_ *
                                       (p_feet_desired_g.segment(3 * i, 3) - kin_.p_feet_.segment(3 * i, 3));
     }
+
+    // generate smooth square function for transition
+    // either use atan or tanh
+    double smooth_rate = 0.2;
+//    double gait_transition = atan(sin(2 * M_PI * kt_[4] * time_) / smooth_rate) / atan(1 / smooth_rate);
+    double gait_transition = tanh(sin(2 * M_PI * kt_[4] * time_) / smooth_rate) / tanh(1 / smooth_rate);
+    gait_transition = (gait_transition + 1) / 2.0;
+    double swing_transition = sin(2 * M_PI * (kt_[4] * time_ - 0.1));
+    swing_transition = (swing_transition + 1) / 2.0;
 
     // linear optimization
     auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_force.rows();
@@ -110,23 +126,20 @@ void Controller::sendCommand() {
     vec_mat = swapLegs(0, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
     opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
     opt_b << acc_imu, vec_mat[3] * acc_force;
-    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_solver_.solve(opt_A, opt_b);
-    grf_qp_1.segment(0, 3) = acc_force.segment(0, 3);
-    grf_qp_1.segment(9, 3) = acc_force.segment(9, 3);
+    Eigen::Matrix<float, 12, 1> grf_qp_0 = qp_solver_.solve(opt_A, opt_b);
+    grf_qp_0.segment(0, 3) = acc_force.segment(0, 3) * (1 - swing_transition);
+    grf_qp_0.segment(9, 3) = acc_force.segment(9, 3) * (1 - swing_transition);
 
     vec_mat = swapLegs(1, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
     opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
     opt_b << acc_imu, vec_mat[3] * acc_force;
-    Eigen::Matrix<float, 12, 1> grf_qp_2 = qp_solver_.solve(opt_A, opt_b);
-    grf_qp_2.segment(3, 3) = acc_force.segment(3, 3);
-    grf_qp_2.segment(6, 3) = acc_force.segment(6, 3);
+    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_solver_.solve(opt_A, opt_b);
+    grf_qp_1.segment(3, 3) = acc_force.segment(3, 3) * swing_transition;
+    grf_qp_1.segment(6, 3) = acc_force.segment(6, 3) * swing_transition;
 
     // swap legs
-    double delta_transition = 0.2;
-    double alpha_transition = tanh(sin(2 * M_PI * kt_[4] * time_) / delta_transition) / tanh(1 / delta_transition);
-    alpha_transition = (alpha_transition + 1) / 2.0;
     Eigen::Matrix<float, 12, 1> grf_qp;
-    grf_qp = alpha_transition * grf_qp_1 + (1 - alpha_transition) * grf_qp_2;
+    grf_qp = (1 - gait_transition) * grf_qp_0 + gait_transition * grf_qp_1;
 //    grf_qp = grf_qp_1;
 
     Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
@@ -210,15 +223,15 @@ void Controller::setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
         lowCmd.motorCmd[i * 3 + 0].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 0].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 0].velocityStiffness = fmin(time_ / 5.0, 1) * (0.12 + kd_[0]);
+        lowCmd.motorCmd[i * 3 + 0].velocityStiffness = fmin(time_ / 5.0, 1) * (0.08);
         lowCmd.motorCmd[i * 3 + 1].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 1].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 1].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = fmin(time_ / 5.0, 1) * (0.04 + kd_[1]);
+        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = fmin(time_ / 5.0, 1) * (0.04);
         lowCmd.motorCmd[i * 3 + 2].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 2].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 2].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = fmin(time_ / 5.0, 1) * (0.02 + kd_[2]);
+        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = fmin(time_ / 5.0, 1) * (0.02);
     }
 }
 
