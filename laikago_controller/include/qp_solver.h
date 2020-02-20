@@ -18,6 +18,7 @@ private:
     MX x_;
     MX A_;
     MX b_;
+    Function opti_f_;
 };
 
 class QpLow {

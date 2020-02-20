@@ -1,4 +1,5 @@
 #include "../include/qp_solver.h"
+#include <ros/ros.h>
 
 QpSolver::QpSolver() : opti_("conic") {
     x_ = opti_.variable(12, 1);
@@ -17,21 +18,29 @@ QpSolver::QpSolver() : opti_("conic") {
 
     Dict opts;
     opts["print_time"] = false;
+    // qpoases options
     opts["printLevel"] = "none";
     opti_.solver("qpoases", opts);
+
+    // osqp options.
+    // TODO: check the accuracy
+//    Dict opts_osqp;
+//    opts_osqp["verbose"] = false;
+//    opts["osqp"] = opts_osqp;
+//    opti_.solver("osqp", opts);
+
+    opti_f_ = opti_.to_function("F", {A_, b_}, {x_});
 }
 
 Eigen::Matrix<float, 12, 1> QpSolver::solve(const Eigen::MatrixXf &A, const Eigen::MatrixXf &b) {
-    DM dm_A(std::vector<double>(A.data(), A.data() + A.size()));
-    dm_A = reshape(dm_A, A_.rows(), A_.columns());
-    DM dm_b(std::vector<double>(b.data(), b.data() + b.size()));
-    dm_b = reshape(dm_b, b_.rows(), b_.columns());
+    DM dm_A(Sparsity::dense(A.rows(), A.cols()),
+            std::vector<double>(A.data(), A.data() + A.size()));
+    DM dm_b(Sparsity::dense(b.rows(), b.cols()),
+            std::vector<double>(b.data(), b.data() + b.size()));
 
-    opti_.set_value(A_, dm_A);
-    opti_.set_value(b_, dm_b);
-
-    auto sol = opti_.solve();
-    auto vector_x = static_cast<std::vector<float>>(sol.value(x_));
+    // function call (fast)
+    std::vector<DM> sol = opti_f_(std::vector<DM>{dm_A, dm_b});
+    std::vector<float> vector_x(sol[0].nonzeros().begin(), sol[0].nonzeros().end());
     Eigen::Matrix<float, 12, 1> res_x(vector_x.data());
 
     return res_x;

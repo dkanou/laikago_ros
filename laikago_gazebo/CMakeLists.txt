@@ -38,6 +38,7 @@ add_library(${PROJECT_NAME}
         ../laikago_controller/src/kinematics.cpp
         ../laikago_controller/src/body_estimation.cpp
         ../laikago_controller/src/controller.cpp
+        ../laikago_controller/src/qp_solver.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}

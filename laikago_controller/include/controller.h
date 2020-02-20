@@ -52,7 +52,8 @@ private:
     float time_{0};
     Kinematics kin_;
     BodyPoseEstimator est_;
-    QpSolver qp_solver_;
+    QpSolver qp_solver0_;
+    QpSolver qp_solver1_;
     ros::NodeHandle &n_;
     ros::Subscriber param_sub;
     float kp_[3]{0, 0, 0};

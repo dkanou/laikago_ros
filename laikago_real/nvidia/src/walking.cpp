@@ -24,7 +24,7 @@ LCM roslcm;
 boost::mutex mutex;
 
 void *update_loop(void *data) {
-    while (ros::ok) {
+    while (ros::ok()) {
         boost::mutex::scoped_lock lock(mutex);
         roslcm.Recv();
         lock.unlock();
@@ -40,7 +40,7 @@ int main(int argc, char *argv[]) {
     if (system("sudo ${Laikago_SDK}/cmake-build-debug/sdk_lcm_server_low &") != 0) { return -1; };
     std::cout << "WARNING: Control level is set to LOW-level." << std::endl;
 
-    ros::init(argc, argv, "stance");
+    ros::init(argc, argv, "walking");
     ros::NodeHandle n;
     ros::Rate loop_rate(500);
     roslcm.SubscribeState();
@@ -62,7 +62,7 @@ int main(int argc, char *argv[]) {
     while (ros::ok()) {
         motiontime++;
         roslcm.Get(RecvLowLCM);
-        memcpy(&RecvLowROS, &RecvLowLCM, sizeof(LowState));
+        memcpy(&RecvLowROS, &RecvLowLCM, sizeof(RecvLowROS));
 
         // control algorithm
         Kinematics::setLowState(RecvLowROS);
@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
         // publish state and cmd
         lowState_pub.publish(lowState);
         highState_pub.publish(highState);
-        memcpy(&SendLowLCM, &SendLowROS, sizeof(LowCmd));
+        memcpy(&SendLowLCM, &SendLowROS, sizeof(SendLowLCM));
         roslcm.Send(SendLowLCM);
 
         // finish one iteration

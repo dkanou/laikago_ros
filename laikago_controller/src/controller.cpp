@@ -126,14 +126,14 @@ void Controller::sendCommand() {
     vec_mat = swapLegs(0, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
     opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
     opt_b << acc_imu, vec_mat[3] * acc_force;
-    Eigen::Matrix<float, 12, 1> grf_qp_0 = qp_solver_.solve(opt_A, opt_b);
+    Eigen::Matrix<float, 12, 1> grf_qp_0 = qp_solver0_.solve(opt_A, opt_b);
     grf_qp_0.segment(0, 3) = acc_force.segment(0, 3) * (1 - swing_transition);
     grf_qp_0.segment(9, 3) = acc_force.segment(9, 3) * (1 - swing_transition);
 
     vec_mat = swapLegs(1, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
     opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
     opt_b << acc_imu, vec_mat[3] * acc_force;
-    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_solver_.solve(opt_A, opt_b);
+    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_solver1_.solve(opt_A, opt_b);
     grf_qp_1.segment(3, 3) = acc_force.segment(3, 3) * swing_transition;
     grf_qp_1.segment(6, 3) = acc_force.segment(6, 3) * swing_transition;
 

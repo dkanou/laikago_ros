@@ -18,6 +18,7 @@ target_link_libraries(control_lib
         casadi
         )
 
+# TODO remove redundent libraries
 add_executable(neutral_mode_low src/neutral_mode_low.cpp)
 target_link_libraries(neutral_mode_low ${EXTRA_LIBS} ${catkin_LIBRARIES})
 
