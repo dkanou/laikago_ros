@@ -5,7 +5,7 @@
 #include <laikago_msgs/LowCmd.h>
 #include <laikago_msgs/LowState.h>
 #include "laikago_sdk/laikago_sdk.hpp"
-#include "../../../laikago_controller/include/controller.h"
+#include "controller.h"
 
 using namespace laikago;
 

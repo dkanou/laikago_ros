@@ -1,7 +1,7 @@
 #include <casadi/casadi.hpp>
 #include <Eigen/Dense>
 #include <ros/ros.h>
-#include "../../../laikago_controller/include/qp_solver.h"
+#include "qp_solver.h"
 
 using namespace casadi;
 

@@ -49,13 +49,28 @@ private:
              Eigen::Matrix<float, 12, 12> Mat_force,
              Eigen::DiagonalMatrix<float, 12> Mat_force_weight);
 
+    void updateStance();
+
+    Eigen::Matrix<float, 12, 1> getKinForce(const Eigen::Matrix<float, 12, 1>& p_feet_desired);
+
+    void getDynMat(Eigen::Matrix<float, 3, 12> &Mat_lin,
+                   Eigen::Matrix<float, 3, 12> &Mat_rot,
+                   Eigen::Matrix<float, 12, 12> &Mat_force,
+                   Eigen::DiagonalMatrix<float, 12> &Mat_force_weight);
+
+    float getGroundWeight();
+
+    void getAccState(Eigen::Matrix<float, 6, 1>& acc_body, Eigen::Matrix<float, 12, 1>& acc_feet);
+
     float time_{0};
     Kinematics kin_;
     BodyPoseEstimator est_;
+    Eigen::Matrix<float, 12, 1> p_feet_default_;
     QpSolver qp_solver0_;
     QpSolver qp_solver1_;
     ros::NodeHandle &n_;
     ros::Subscriber param_sub;
+    const float kp_kin_{1500};
     float kp_[3]{0, 0, 0};
     float kd_[3]{0, 0, 0};
     float kt_[6]{};
