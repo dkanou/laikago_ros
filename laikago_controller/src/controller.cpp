@@ -49,22 +49,18 @@ void Controller::sendCommand() {
     swing_transition = (swing_transition + 1) / 2.0f;
 
     // linear optimization
-    auto num_rows = Mat_lin.rows() + Mat_rot.rows() + Mat_force.rows();
-    Eigen::MatrixXf opt_A(num_rows, 12);
-    Eigen::MatrixXf opt_b(num_rows, 1);
-    std::vector<Eigen::MatrixXf> vec_mat;
-
-    vec_mat = swapLegs(0, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
-    opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
-    opt_b << acc_body, vec_mat[3] * acc_feet;
-    Eigen::Matrix<float, 12, 1> grf_qp_0 = qp_solver0_.solve(opt_A, opt_b);
+    Eigen::Matrix<float, 6, 12> opt_A;
+    Eigen::Matrix<float, 6, 1> opt_b;
+    opt_A << Mat_lin, Mat_rot;
+    opt_A.block(0, 0, 2, 12) *= 1e-1;   //todo: it might not necessary
+    opt_b = acc_body;
+    Eigen::Matrix<float, 4, 1> D_0{1, 0, 0, 1};
+    Eigen::Matrix<float, 12, 1> grf_qp_0 = qp_prob_[0].solve(opt_A, opt_b, D_0);
     grf_qp_0.segment(0, 3) = acc_feet.segment(0, 3) * (1 - swing_transition);
     grf_qp_0.segment(9, 3) = acc_feet.segment(9, 3) * (1 - swing_transition);
 
-    vec_mat = swapLegs(1, Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
-    opt_A << vec_mat[0], vec_mat[1], vec_mat[3] * vec_mat[2];
-    opt_b << acc_body, vec_mat[3] * acc_feet;
-    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_solver1_.solve(opt_A, opt_b);
+    Eigen::Matrix<float, 4, 1> D_1{0, 1, 1, 0};
+    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_prob_[1].solve(opt_A, opt_b, D_1);
     grf_qp_1.segment(3, 3) = acc_feet.segment(3, 3) * swing_transition;
     grf_qp_1.segment(6, 3) = acc_feet.segment(6, 3) * swing_transition;
 
@@ -173,38 +169,6 @@ Eigen::Matrix3f Controller::conjMatrix(const Eigen::Vector3f &vec) {
             vec[2], 0, -vec[0],
             -vec[1], vec[0], 0;
     return mat;
-}
-
-void Controller::setTrajectory(Eigen::Matrix<float, 12, 1> &p_feet_desired) {
-
-}
-
-std::vector<Eigen::MatrixXf>
-Controller::swapLegs(int phase,
-                     Eigen::Matrix<float, 3, 12> Mat_lin,
-                     Eigen::Matrix<float, 3, 12> Mat_rot,
-                     Eigen::Matrix<float, 12, 12> Mat_force,
-                     Eigen::DiagonalMatrix<float, 12> Mat_force_weight) {
-    Mat_lin.block(0, 0, 2, 12) *= 1e-1;
-
-    if (phase == 0) {
-        Mat_lin.block(0, 0, 3, 3) *= 1e-3;
-        Mat_rot.block(0, 0, 3, 3) *= 1e-3;
-        Mat_force_weight.diagonal().segment(0, 3) *= 1e3;
-        Mat_lin.block(0, 9, 3, 3) *= 1e-3;
-        Mat_rot.block(0, 9, 3, 3) *= 1e-3;
-        Mat_force_weight.diagonal().segment(9, 3) *= 1e3;
-    } else if (phase == 1) {
-        Mat_lin.block(0, 3, 3, 3) *= 1e-3;
-        Mat_rot.block(0, 3, 3, 3) *= 1e-3;
-        Mat_force_weight.diagonal().segment(3, 3) *= 1e3;
-        Mat_lin.block(0, 6, 3, 3) *= 1e-3;
-        Mat_rot.block(0, 6, 3, 3) *= 1e-3;
-        Mat_force_weight.diagonal().segment(6, 3) *= 1e3;
-    } else {
-        std::cerr << "wrong phase: " << phase << std::endl;
-    }
-    return {Mat_lin, Mat_rot, Mat_force, Mat_force_weight};
 }
 
 void Controller::updateStance() {

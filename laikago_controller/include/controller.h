@@ -40,15 +40,6 @@ private:
 
     static Eigen::Matrix3f conjMatrix(const Eigen::Vector3f &vec);
 
-    void setTrajectory(Eigen::Matrix<float, 12, 1> &p_feet_desired);
-
-    std::vector<Eigen::MatrixXf>
-    swapLegs(int phase,
-             Eigen::Matrix<float, 3, 12> Mat_lin,
-             Eigen::Matrix<float, 3, 12> Mat_rot,
-             Eigen::Matrix<float, 12, 12> Mat_force,
-             Eigen::DiagonalMatrix<float, 12> Mat_force_weight);
-
     void updateStance();
 
     Eigen::Matrix<float, 12, 1> getKinForce(const Eigen::Matrix<float, 12, 1>& p_feet_desired);
@@ -68,6 +59,7 @@ private:
     Eigen::Matrix<float, 12, 1> p_feet_default_;
     QpSolver qp_solver0_;
     QpSolver qp_solver1_;
+    QpProblem qp_prob_[2];
     ros::NodeHandle &n_;
     ros::Subscriber param_sub;
     const float kp_kin_{1500};
