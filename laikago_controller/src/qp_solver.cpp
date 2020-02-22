@@ -6,8 +6,8 @@ QpProblem::QpProblem() {
     auto A = opti.parameter(6, 12);
     auto b = opti.parameter(6, 1);
     double R = 1e-3;
-    auto lost = dot(mtimes(A, u) - b, mtimes(A, u) - b) + R * dot(u, u);
-    opti.minimize(lost);
+    auto cost = dot(mtimes(A, u) - b, mtimes(A, u) - b) + R * dot(u, u);
+    opti.minimize(cost);
 
     // friction cone
     double mu = 0.3;
@@ -28,12 +28,13 @@ QpProblem::QpProblem() {
     opts["printLevel"] = "none";
     opti.solver("qpoases", opts);
 
-    opti_f_ = opti.to_function("F", {A, b, D}, {u});
+    opti_f_ = opti.to_function("F", {A, b, D}, {u, cost});
 }
 
 Eigen::Matrix<float, 12, 1> QpProblem::solve(const Eigen::MatrixXf &A,
                                   const Eigen::MatrixXf &b,
-                                  const Eigen::MatrixXf &D) {
+                                  const Eigen::MatrixXf &D,
+                                  float &cost) {
     DM dm_A(Sparsity::dense(A.rows(), A.cols()),
             std::vector<double>(A.data(), A.data() + A.size()));
     DM dm_b(Sparsity::dense(b.rows(), b.cols()),
@@ -42,6 +43,8 @@ Eigen::Matrix<float, 12, 1> QpProblem::solve(const Eigen::MatrixXf &A,
             std::vector<double>(D.data(), D.data() + D.size()));
 
     std::vector<DM> sol = opti_f_(std::vector<DM>{dm_A, dm_b, dm_D});
+    cost = sol[1].nonzeros().at(0);
+
     std::vector<float> vector_u(sol[0].nonzeros().begin(), sol[0].nonzeros().end());
     Eigen::Matrix<float, 12, 1> res_u(vector_u.data());
     return res_u;

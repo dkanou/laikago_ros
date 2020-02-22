@@ -12,6 +12,18 @@
 using namespace casadi;
 using laikago_model::lowCmd;
 
+class LowPassFilter{
+public:
+    float firstOrder(float x_in) {
+        float fil_const = 0.1;
+        low_pass_x_ = fil_const * x_in + (1 - fil_const) * low_pass_x_;
+        return low_pass_x_;
+    }
+
+private:
+    float low_pass_x_{0};
+};
+
 class Controller {
 public:
     Controller(ros::NodeHandle *n);
@@ -51,15 +63,15 @@ private:
 
     float getGroundWeight();
 
+    Eigen::Matrix<float, 12, 1> getFpTarget();
+
     void getAccState(Eigen::Matrix<float, 6, 1>& acc_body, Eigen::Matrix<float, 12, 1>& acc_feet);
 
     float time_{0};
     Kinematics kin_;
     BodyPoseEstimator est_;
     Eigen::Matrix<float, 12, 1> p_feet_default_;
-    QpSolver qp_solver0_;
-    QpSolver qp_solver1_;
-    QpProblem qp_prob_[2];
+    QpProblem qp_prob_[3];
     ros::NodeHandle &n_;
     ros::Subscriber param_sub;
     const float kp_kin_{1500};
@@ -69,6 +81,7 @@ private:
     bool is_stance_{false};
     float yaw_offset_{0};
     float control_switch_weight_{0};
+    LowPassFilter lowPassFilter_[12];
 };
 
 

@@ -12,7 +12,8 @@ public:
 
     Eigen::Matrix<float, 12, 1> solve(const Eigen::MatrixXf &A,
                                       const Eigen::MatrixXf &b,
-                                      const Eigen::MatrixXf &D);
+                                      const Eigen::MatrixXf &D,
+                                      float &lost);
 
 private:
     Function opti_f_;

@@ -20,7 +20,7 @@ void Controller::paramCallback(const laikago_msgs::GainParam &msg) {
 
 void Controller::sendCommand() {
     kin_.update();
-    est_.update(); // TODO: improve the state estimation speed
+    est_.update();
     est_.publish();
     updateStance();
     setMotorZero();
@@ -33,6 +33,7 @@ void Controller::sendCommand() {
     Eigen::Matrix<float, 3, 12> Mat_lin;
     Eigen::Matrix<float, 3, 12> Mat_rot;
     Eigen::Matrix<float, 12, 12> Mat_force;
+    //todo: remove Mat_force and Mat_force_weight
     Eigen::DiagonalMatrix<float, 12> Mat_force_weight;
     getDynMat(Mat_lin, Mat_rot, Mat_force, Mat_force_weight);
 
@@ -43,31 +44,97 @@ void Controller::sendCommand() {
 
     // generate smooth square function for transition
     float smooth_rate = 0.2;
-    float gait_transition = tanhf(sinf(2 * M_PI * kt_[4] * time_) / smooth_rate) / tanhf(1 / smooth_rate);
+    float gait_transition = tanhf(sinf(2 * float(M_PI) * kt_[4] * time_) / smooth_rate) / tanhf(1 / smooth_rate);
     gait_transition = (gait_transition + 1) / 2.0f;
-    float swing_transition = sinf(2 * M_PI * (kt_[4] * time_ - 0.1));
+    float swing_transition = sinf(2 * float(M_PI) * (kt_[4] * time_ - 0.1f));
     swing_transition = (swing_transition + 1) / 2.0f;
 
     // linear optimization
     Eigen::Matrix<float, 6, 12> opt_A;
     Eigen::Matrix<float, 6, 1> opt_b;
     opt_A << Mat_lin, Mat_rot;
-    opt_A.block(0, 0, 2, 12) *= 1e-1;   //todo: it might not necessary
+    opt_A.block(0, 0, 2, 12) *= 1e-1;   //todo: find another way to adjust
     opt_b = acc_body;
     Eigen::Matrix<float, 4, 1> D_0{1, 0, 0, 1};
-    Eigen::Matrix<float, 12, 1> grf_qp_0 = qp_prob_[0].solve(opt_A, opt_b, D_0);
-    grf_qp_0.segment(0, 3) = acc_feet.segment(0, 3) * (1 - swing_transition);
-    grf_qp_0.segment(9, 3) = acc_feet.segment(9, 3) * (1 - swing_transition);
+    float cost_0;
+    Eigen::Matrix<float, 12, 1> grf_qp_0 = qp_prob_[0].solve(opt_A, opt_b, D_0, cost_0);
+    grf_qp_0.segment(0, 3) = acc_feet.segment(0, 3);
+    grf_qp_0.segment(9, 3) = acc_feet.segment(9, 3);
 
     Eigen::Matrix<float, 4, 1> D_1{0, 1, 1, 0};
-    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_prob_[1].solve(opt_A, opt_b, D_1);
-    grf_qp_1.segment(3, 3) = acc_feet.segment(3, 3) * swing_transition;
-    grf_qp_1.segment(6, 3) = acc_feet.segment(6, 3) * swing_transition;
+    float cost_1;
+    Eigen::Matrix<float, 12, 1> grf_qp_1 = qp_prob_[1].solve(opt_A, opt_b, D_1, cost_1);
+    grf_qp_1.segment(3, 3) = acc_feet.segment(3, 3);
+    grf_qp_1.segment(6, 3) = acc_feet.segment(6, 3);
+
+    Eigen::Matrix<float, 4, 1> D_2{0, 0, 0, 0};
+    float cost_2;
+    Eigen::Matrix<float, 12, 1> grf_qp_2 = qp_prob_[2].solve(opt_A, opt_b, D_2, cost_2);
+
+    Eigen::Matrix<float, 12, 1> p_feet_error;
+    Eigen::Matrix<float, 3, 3> R_yaw_offset;
+    R_yaw_offset << cos(yaw_offset_), -sin(yaw_offset_), 0,
+            sin(yaw_offset_), cos(yaw_offset_), 0,
+            0, 0, 1;
+    for (int i = 0; i < 4; i++) {
+        //todo: consider yaw in error, check the yaw offset, desired yaw and swing foot reference
+        // the default should consider swing foot placement
+        p_feet_error.segment(3 * i, 3) = (p_feet_default_.segment(3 * i, 3) -
+                                          R_yaw_offset.transpose() * kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3)).cwiseAbs();
+    }
+    Eigen::Matrix<float, 8, 1> p_feet_error_xy;
+    float feet_error_sum0{0};
+    float feet_error_sum1{0};
+    float feet_error_sum2{0};
+    for (int i=0; i<4; i++){
+        feet_error_sum0 += p_feet_error(i*3 + 0)*(1 - D_0(i));
+        feet_error_sum0 += p_feet_error(i*3 + 1)*(1 - D_0(i));
+        feet_error_sum1 += p_feet_error(i*3 + 0)*(1 - D_1(i));
+        feet_error_sum1 += p_feet_error(i*3 + 1)*(1 - D_1(i));
+        feet_error_sum2 += p_feet_error(i*3 + 0)*(1 - D_2(i));
+        feet_error_sum2 += p_feet_error(i*3 + 1)*(1 - D_2(i));
+    }
+
+    static int s_ptime{0};
+    ++s_ptime;
+    float feet_err_weight = 400;
+    std::vector<float> total_costs{feet_error_sum0*feet_err_weight + cost_0,
+                                   feet_error_sum1*feet_err_weight + cost_1,
+                                   feet_error_sum2*feet_err_weight + cost_2};
+    int min_cost_index = std::min_element(total_costs.begin(),total_costs.end()) - total_costs.begin();
+    static int grf_index{2};
+//    int grf_index{sinf(2 * float(M_PI) * (kt_[4] * time_ ))>0};
+//    int grf_index{2};
+
+    // 0.35s/0.002 = 175
+    if (s_ptime%175==0){
+        grf_index = min_cost_index;
+        printf("time = %f, min cost index = %d", time_, min_cost_index);
+        printf("\ttotal 0 = %f, total 1 = %f, total 2 = %f\n",
+                feet_error_sum0*feet_err_weight + cost_0,
+                feet_error_sum1*feet_err_weight + cost_1,
+                feet_error_sum2*feet_err_weight + cost_2);
+    }
 
     // swap legs
+    Eigen::Matrix<float, 12, 1>grf_qp_arr[]{grf_qp_0, grf_qp_1, grf_qp_2};
+    auto grf_in = grf_qp_arr[grf_index];
     Eigen::Matrix<float, 12, 1> grf_qp;
-    grf_qp = (1 - gait_transition) * grf_qp_0 + gait_transition * grf_qp_1;
-//    grf_qp = grf_qp_1;
+    for (int i=0; i<12; i++){
+        grf_qp(i) = lowPassFilter_[i].firstOrder(grf_in(i));
+    }
+
+//    Eigen::Matrix<float, 12, 1> grf_qp;
+//    grf_qp = (1 - gait_transition) * grf_qp_0 + gait_transition * grf_qp_1;
+//    grf_qp = grf_qp_0;
+//    grf_qp = grf_qp_2;
+
+    // swap legs by total cost
+//    Eigen::Matrix<float, 12, 1> grf_qp;
+//    static Eigen::Matrix<float, 12, 1> grf_qp_last{grf_qp_0};
+
+
+
 
     Eigen::Matrix<float, 12, 1> feet_force_grf;
     for (int i = 0; i < 4; i++) {
@@ -218,9 +285,27 @@ float Controller::getGroundWeight() {
     return ground_weight;
 }
 
+
+Eigen::Matrix<float, 12, 1> Controller::getFpTarget() {
+    Eigen::Matrix<float, 12, 1> p_feet_desired_fp(p_feet_default_);
+    for (int i = 0; i < 4; i++) {
+        float k_x{0.1/2};   //todo: temporarily decrease for gait switch control
+        float k_y{0.2/2};
+        float height_z{0.07};
+        Eigen::Matrix<float, 3, 1> p_feet_delta;
+        p_feet_delta << est_.worldState_.bodySpeed.x * (k_x + kd_[0]),
+                est_.worldState_.bodySpeed.y * (k_y + kd_[1]),
+                height_z;
+        p_feet_desired_fp.segment(3 * i, 3) += kin_.R_yaw_.transpose() * p_feet_delta;
+    }
+
+    return p_feet_desired_fp;
+}
+
+
 void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body, Eigen::Matrix<float, 12, 1> &acc_feet) {
     Eigen::DiagonalMatrix<float, 6> kp_body, kd_body;
-    kp_body.diagonal() << 700 * 0, 700 * 0, 7000, 300, 300, 300;
+    kp_body.diagonal() << 700 * .0, 700 * .0, 7000, 300, 300, 300;
     kd_body.diagonal() << 30 + kt_[2], 30 + kt_[2], 0, 0, 0, 0.5 + kt_[3];
     Eigen::Matrix<float, 6, 1> desired_pos_body, pos_body, vel_body;
     Eigen::Matrix<float, 3, 1> bodySpeed_offset;
@@ -236,22 +321,18 @@ void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body, Eigen::Matrix
             est_.worldState_.bodySpeed.y,
             est_.worldState_.bodySpeed.z,
             kin_.dq_imu_;
-    bodySpeed_offset << 0.05 + kt_[0], 0.06 + kt_[1], 0;
+    bodySpeed_offset << 0.0 + kt_[0], 0.06 + kt_[1], 0;
     vel_body.segment(0, 3) += kin_.R_yaw_ * bodySpeed_offset;
     acc_body = fmin(time_ / 10.0, 1) * (kp_body * (desired_pos_body - pos_body) - kd_body * vel_body);
 
     // foot placement
-    Eigen::Matrix<float, 12, 1> p_feet_desired_fp(p_feet_default_);
+    Eigen::Matrix<float, 12, 1> p_feet_desired_fp = getFpTarget();
+
+    //todo: the desired feet should be in world frame not in body frame
+    float k_w{0.5}; //todo: temporarily decrease for switching gait control
+    auto feet_force_fp = getKinForce(p_feet_desired_fp) * k_w;
     for (int i = 0; i < 4; i++) {
-        Eigen::Matrix<float, 3, 1> p_feet_delta;
-        p_feet_delta << est_.worldState_.bodySpeed.x * (0.1 + kd_[0]),
-                est_.worldState_.bodySpeed.y * (0.2 + kd_[1]),
-                0.07;
-        p_feet_desired_fp.segment(3 * i, 3) += kin_.R_yaw_.transpose() * p_feet_delta;
-    }
-    auto feet_force_fp = getKinForce(p_feet_desired_fp);
-    for (int i = 0; i < 4; i++) {
-        // the grf is opposite of the motor force
+        // attention: the grf is opposite of the motor force
         acc_feet.segment(3 * i, 3) = kin_.R_imu_ * -feet_force_fp.segment(3 * i, 3);
     }
 }
