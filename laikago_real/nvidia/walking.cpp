@@ -79,6 +79,7 @@ int main(int argc, char *argv[]) {
 
         // finish one iteration
         ros::spinOnce();
+//        printf("cycle time = %f\n", loop_rate.cycleTime().toSec());
         loop_rate.sleep();
     }
     return 0;

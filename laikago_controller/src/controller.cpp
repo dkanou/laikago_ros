@@ -71,7 +71,28 @@ void Controller::sendCommand() {
     float cost_2;
     Eigen::Matrix<float, 12, 1> grf_qp_2 = qp_prob_[2].solve(opt_A, opt_b, D_2, cost_2);
 
+    Eigen::Matrix<float, 4, 1> D_3{1, 0, 0, 0};
+    float cost_3;
+    Eigen::Matrix<float, 12, 1> grf_qp_3 = qp_prob_[3].solve(opt_A, opt_b, D_3, cost_3);
+    grf_qp_3.segment(0, 3) = acc_feet.segment(0, 3);
+
+    Eigen::Matrix<float, 4, 1> D_4{0, 1, 0, 0};
+    float cost_4;
+    Eigen::Matrix<float, 12, 1> grf_qp_4 = qp_prob_[4].solve(opt_A, opt_b, D_4, cost_4);
+    grf_qp_4.segment(3, 3) = acc_feet.segment(3, 3);
+
+    Eigen::Matrix<float, 4, 1> D_5{0, 0, 1, 0};
+    float cost_5;
+    Eigen::Matrix<float, 12, 1> grf_qp_5 = qp_prob_[5].solve(opt_A, opt_b, D_5, cost_5);
+    grf_qp_5.segment(6, 3) = acc_feet.segment(6, 3);
+
+    Eigen::Matrix<float, 4, 1> D_6{0, 0, 0, 1};
+    float cost_6;
+    Eigen::Matrix<float, 12, 1> grf_qp_6 = qp_prob_[6].solve(opt_A, opt_b, D_6, cost_6);
+    grf_qp_6.segment(9, 3) = acc_feet.segment(9, 3);
+
     Eigen::Matrix<float, 12, 1> p_feet_error;
+    Eigen::Matrix<float, 12, 1> p_feet_desired_fp = getFpTarget();
     Eigen::Matrix<float, 3, 3> R_yaw_offset;
     R_yaw_offset << cos(yaw_offset_), -sin(yaw_offset_), 0,
             sin(yaw_offset_), cos(yaw_offset_), 0,
@@ -79,13 +100,17 @@ void Controller::sendCommand() {
     for (int i = 0; i < 4; i++) {
         //todo: consider yaw in error, check the yaw offset, desired yaw and swing foot reference
         // the default should consider swing foot placement
-        p_feet_error.segment(3 * i, 3) = (p_feet_default_.segment(3 * i, 3) -
+        p_feet_error.segment(3 * i, 3) = (p_feet_desired_fp.segment(3 * i, 3) -
                                           R_yaw_offset.transpose() * kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3)).cwiseAbs();
     }
     Eigen::Matrix<float, 8, 1> p_feet_error_xy;
     float feet_error_sum0{0};
     float feet_error_sum1{0};
     float feet_error_sum2{0};
+    float feet_error_sum3{0};
+    float feet_error_sum4{0};
+    float feet_error_sum5{0};
+    float feet_error_sum6{0};
     for (int i=0; i<4; i++){
         feet_error_sum0 += p_feet_error(i*3 + 0)*(1 - D_0(i));
         feet_error_sum0 += p_feet_error(i*3 + 1)*(1 - D_0(i));
@@ -93,35 +118,53 @@ void Controller::sendCommand() {
         feet_error_sum1 += p_feet_error(i*3 + 1)*(1 - D_1(i));
         feet_error_sum2 += p_feet_error(i*3 + 0)*(1 - D_2(i));
         feet_error_sum2 += p_feet_error(i*3 + 1)*(1 - D_2(i));
+        feet_error_sum3 += p_feet_error(i*3 + 0)*(1 - D_3(i));
+        feet_error_sum3 += p_feet_error(i*3 + 1)*(1 - D_3(i));
+        feet_error_sum4 += p_feet_error(i*3 + 0)*(1 - D_4(i));
+        feet_error_sum4 += p_feet_error(i*3 + 1)*(1 - D_4(i));
+        feet_error_sum5 += p_feet_error(i*3 + 0)*(1 - D_5(i));
+        feet_error_sum5 += p_feet_error(i*3 + 1)*(1 - D_5(i));
+        feet_error_sum6 += p_feet_error(i*3 + 0)*(1 - D_6(i));
+        feet_error_sum6 += p_feet_error(i*3 + 1)*(1 - D_6(i));
     }
 
     static int s_ptime{0};
     ++s_ptime;
-    float feet_err_weight = 400;
+    float feet_err_weight = 300;
     std::vector<float> total_costs{feet_error_sum0*feet_err_weight + cost_0,
                                    feet_error_sum1*feet_err_weight + cost_1,
-                                   feet_error_sum2*feet_err_weight + cost_2};
-    int min_cost_index = std::min_element(total_costs.begin(),total_costs.end()) - total_costs.begin();
+                                   feet_error_sum2*feet_err_weight + cost_2,
+                                   feet_error_sum3*feet_err_weight + cost_3,
+                                   feet_error_sum4*feet_err_weight + cost_4,
+                                   feet_error_sum5*feet_err_weight + cost_5,
+                                   feet_error_sum6*feet_err_weight + cost_6};
+//    int min_cost_index = std::min_element(total_costs.begin(),total_costs.end()) - total_costs.begin();
+    int min_cost_index{sinf(2 * float(M_PI) * (kt_[4] * time_ ))>0};
     static int grf_index{2};
-//    int grf_index{sinf(2 * float(M_PI) * (kt_[4] * time_ ))>0};
-//    int grf_index{2};
+    grf_index = min_cost_index;
 
     // 0.35s/0.002 = 175
     if (s_ptime%175==0){
-        grf_index = min_cost_index;
-        printf("time = %f, min cost index = %d", time_, min_cost_index);
-        printf("\ttotal 0 = %f, total 1 = %f, total 2 = %f\n",
-                feet_error_sum0*feet_err_weight + cost_0,
-                feet_error_sum1*feet_err_weight + cost_1,
-                feet_error_sum2*feet_err_weight + cost_2);
+//        grf_index = min_cost_index;
+//        printf("time = %f, min cost index = %d", time_, min_cost_index);
+//        printf("\ttotal 0 = %f, total 1 = %f, total 2 = %f,"
+//               "total 3 = %f, total 4 = %f, total 5 = %f, total 6 = %f\n",
+//                total_costs[0],
+//               total_costs[1],
+//               total_costs[2],
+//               total_costs[3],
+//               total_costs[4],
+//               total_costs[5],
+//               total_costs[6]);
     }
 
     // swap legs
-    Eigen::Matrix<float, 12, 1>grf_qp_arr[]{grf_qp_0, grf_qp_1, grf_qp_2};
+    Eigen::Matrix<float, 12, 1>grf_qp_arr[]{grf_qp_0, grf_qp_1, grf_qp_2, grf_qp_3, grf_qp_4, grf_qp_5, grf_qp_6};
     auto grf_in = grf_qp_arr[grf_index];
     Eigen::Matrix<float, 12, 1> grf_qp;
+    float fil_const = 0.1;
     for (int i=0; i<12; i++){
-        grf_qp(i) = lowPassFilter_[i].firstOrder(grf_in(i));
+        grf_qp(i) = lowPassFilter_[i].firstOrder(grf_in(i), fil_const);
     }
 
 //    Eigen::Matrix<float, 12, 1> grf_qp;
@@ -291,10 +334,14 @@ Eigen::Matrix<float, 12, 1> Controller::getFpTarget() {
     for (int i = 0; i < 4; i++) {
         float k_x{0.1/2};   //todo: temporarily decrease for gait switch control
         float k_y{0.2/2};
-        float height_z{0.07};
+        float height_z{0.08};
         Eigen::Matrix<float, 3, 1> p_feet_delta;
-        p_feet_delta << est_.worldState_.bodySpeed.x * (k_x + kd_[0]),
-                est_.worldState_.bodySpeed.y * (k_y + kd_[1]),
+        //todo: the velocity is too noisy. Re-tune the filter weight
+        float vel_x{lowPassFilterVel_[0].firstOrder(est_.worldState_.bodySpeed.x, 0.01)};
+        float vel_y{lowPassFilterVel_[1].firstOrder(est_.worldState_.bodySpeed.y, 0.01)};
+        printf("vel y = %f, est vel y = %f\n", est_.worldState_.bodySpeed.y, vel_y);
+        p_feet_delta << vel_x * (k_x + kd_[0]),
+                vel_y * (k_y + kd_[1]),
                 height_z;
         p_feet_desired_fp.segment(3 * i, 3) += kin_.R_yaw_.transpose() * p_feet_delta;
     }
@@ -306,7 +353,7 @@ Eigen::Matrix<float, 12, 1> Controller::getFpTarget() {
 void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body, Eigen::Matrix<float, 12, 1> &acc_feet) {
     Eigen::DiagonalMatrix<float, 6> kp_body, kd_body;
     kp_body.diagonal() << 700 * .0, 700 * .0, 7000, 300, 300, 300;
-    kd_body.diagonal() << 30 + kt_[2], 30 + kt_[2], 0, 0, 0, 0.5 + kt_[3];
+    kd_body.diagonal() << 30, 30, 0, 0, 0, 0.5;
     Eigen::Matrix<float, 6, 1> desired_pos_body, pos_body, vel_body;
     Eigen::Matrix<float, 3, 1> bodySpeed_offset;
     desired_pos_body << 0, 0, 0.4,
@@ -321,7 +368,7 @@ void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body, Eigen::Matrix
             est_.worldState_.bodySpeed.y,
             est_.worldState_.bodySpeed.z,
             kin_.dq_imu_;
-    bodySpeed_offset << 0.0 + kt_[0], 0.06 + kt_[1], 0;
+    bodySpeed_offset << 0.0+kt_[0], 0.00+kt_[1], 0;
     vel_body.segment(0, 3) += kin_.R_yaw_ * bodySpeed_offset;
     acc_body = fmin(time_ / 10.0, 1) * (kp_body * (desired_pos_body - pos_body) - kd_body * vel_body);
 

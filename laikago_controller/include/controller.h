@@ -14,8 +14,7 @@ using laikago_model::lowCmd;
 
 class LowPassFilter{
 public:
-    float firstOrder(float x_in) {
-        float fil_const = 0.1;
+    float firstOrder(float x_in, float fil_const) {
         low_pass_x_ = fil_const * x_in + (1 - fil_const) * low_pass_x_;
         return low_pass_x_;
     }
@@ -71,7 +70,7 @@ private:
     Kinematics kin_;
     BodyPoseEstimator est_;
     Eigen::Matrix<float, 12, 1> p_feet_default_;
-    QpProblem qp_prob_[3];
+    QpProblem qp_prob_[7];
     ros::NodeHandle &n_;
     ros::Subscriber param_sub;
     const float kp_kin_{1500};
@@ -82,6 +81,7 @@ private:
     float yaw_offset_{0};
     float control_switch_weight_{0};
     LowPassFilter lowPassFilter_[12];
+    LowPassFilter lowPassFilterVel_[2];
 };
 
 

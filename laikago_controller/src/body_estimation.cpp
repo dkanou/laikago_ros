@@ -49,7 +49,7 @@ void BodyPoseEstimator::update() {
     float process_noise_vimu = 0.02;
     float process_noise_pfoot = 0.0002;
     float sensor_noise_pimu_rel_foot = 0.001;
-    float sensor_noise_vimu_rel_foot = 0.1;
+    float sensor_noise_vimu_rel_foot = 0.1*1e3;
     float sensor_noise_zfoot = 0.001;
 
     Eigen::Matrix<float, 18, 18> Q = Eigen::Matrix<float, 18, 18>::Identity();
