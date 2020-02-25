@@ -1,4 +1,5 @@
 find_package(Eigen3 3.3 REQUIRED NO_MODULE)
+find_package(OpenMP REQUIRED)
 
 include_directories(../../laikago_controller/include)
 
@@ -16,6 +17,7 @@ target_link_libraries(control_lib
     ${catkin_LIBRARIES}
     ${EXTRA_LIBS}
     Eigen3::Eigen
+    OpenMP::OpenMP_CXX
     casadi
     )
 

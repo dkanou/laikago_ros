@@ -13,9 +13,10 @@ int main(int argc, char *argv[]) {
 //    Eigen::MatrixXf D = Eigen::MatrixXf::Ones(12, 1);
     Eigen::MatrixXf D = Eigen::MatrixXf::Zero(4, 1);
     QpProblem qpProblem;
-    auto u = qpProblem.solve(A, b, D);
-    std::cout << u.transpose() << std::endl;
-    std::cout << A*u << "  " << A*u-b << std::endl;
+    auto res = qpProblem.solve(A, b, D);
+    auto u = res.first;
+    auto cost = res.second;
+    std::cout << u.transpose() << " " << cost << std::endl;
 
     return 0;
 }

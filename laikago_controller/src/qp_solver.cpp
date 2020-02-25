@@ -1,4 +1,5 @@
 #include "../include/qp_solver.h"
+#include <omp.h>
 
 QpProblem::QpProblem() {
     Opti opti("conic");
@@ -29,12 +30,12 @@ QpProblem::QpProblem() {
     opti.solver("qpoases", opts);
 
     opti_f_ = opti.to_function("F", {A, b, D}, {u, cost});
+    opti_par_f_ = opti_f_.map(7, "thread", 12);
 }
 
-Eigen::Matrix<float, 12, 1> QpProblem::solve(const Eigen::MatrixXf &A,
-                                  const Eigen::MatrixXf &b,
-                                  const Eigen::MatrixXf &D,
-                                  float &cost) {
+std::pair<Eigen::Matrix<float, 12, 1>, float> QpProblem::solve(const Eigen::MatrixXf &A,
+                                                               const Eigen::MatrixXf &b,
+                                                               const Eigen::MatrixXi &D) {
     DM dm_A(Sparsity::dense(A.rows(), A.cols()),
             std::vector<double>(A.data(), A.data() + A.size()));
     DM dm_b(Sparsity::dense(b.rows(), b.cols()),
@@ -43,9 +44,28 @@ Eigen::Matrix<float, 12, 1> QpProblem::solve(const Eigen::MatrixXf &A,
             std::vector<double>(D.data(), D.data() + D.size()));
 
     std::vector<DM> sol = opti_f_(std::vector<DM>{dm_A, dm_b, dm_D});
-    cost = sol[1].nonzeros().at(0);
 
     std::vector<float> vector_u(sol[0].nonzeros().begin(), sol[0].nonzeros().end());
-    Eigen::Matrix<float, 12, 1> res_u(vector_u.data());
-    return res_u;
+    Eigen::Matrix<float, 12, 1> u(vector_u.data());
+    float cost = sol[1].nonzeros().at(0);
+    return {u, cost};
+}
+
+MultiQp::MultiQp(const std::vector<Eigen::Matrix<int, 4, 1>> &D_vec) :
+        D_vec_(D_vec), par_n_(D_vec.size()) {
+    grf_qp_vec_ = std::vector<Eigen::Matrix<float, 12, 1>>(par_n_, Eigen::Matrix<float, 12, 1>::Zero());
+    cost_vec_ = std::vector<float>(par_n_, 0);
+}
+
+void MultiQp::multiSolve(const Eigen::MatrixXf &A,
+                const Eigen::MatrixXf &b,
+                unsigned int curr_index) {
+    static unsigned int count{0};
+    unsigned int roll_index = count%par_n_;
+    for (auto i : {curr_index, roll_index} ) {
+        auto res = qpProblem_[i].solve(A, b, D_vec_[i]);
+        grf_qp_vec_[i] = res.first;
+        cost_vec_[i] = res.second;
+    }
+    ++count;
 }
