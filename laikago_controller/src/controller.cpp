@@ -62,7 +62,6 @@ void Controller::sendCommand() {
     ++s_ptime;
     if (s_ptime%175==0){ // 175*0.002 = 0.35s(~3Hz)
         grf_index_ = min_cost_index;
-//        std::cout << grf_index_ << "\n";
     }
 
     // swap legs
