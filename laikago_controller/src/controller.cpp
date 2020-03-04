@@ -22,8 +22,8 @@ void Controller::paramCallback(const laikago_msgs::GainParam &msg) {
 void Controller::sendCommand() {
     kin_.update();
     est_.update();
-    vel_x_ = lpFilterVel_[0].firstOrder(est_.worldState_.bodySpeed.x, 0.01);
-    vel_y_ = lpFilterVel_[1].firstOrder(est_.worldState_.bodySpeed.y, 0.01);
+    vel_x_ = lpFilterVel_[0].firstOrder(est_.worldState_.bodySpeed.x, 0.02); // no filtering
+    vel_y_ = lpFilterVel_[1].firstOrder(est_.worldState_.bodySpeed.y, 0.02);
     est_.publish();
     controlState_.bodySpeed.x = est_.worldState_.bodySpeed.x;
     controlState_.bodySpeed.y = est_.worldState_.bodySpeed.y;
@@ -35,6 +35,10 @@ void Controller::sendCommand() {
 
     // force from feet kinematics
     Eigen::Matrix<float, 12, 1> p_feet_desired(p_feet_default_);
+    p_feet_desired(0 + 1) -= 0.03;
+    p_feet_desired(3 + 1) += 0.03;
+    p_feet_desired(6 + 1) -= 0.03;
+    p_feet_desired(9 + 1) += 0.03;
     Eigen::Matrix<float, 12, 1> feet_force_kin = getKinForce(p_feet_desired);
 
     // matrix of feet force to acceleration
@@ -44,8 +48,7 @@ void Controller::sendCommand() {
 
     // acceleration
     Eigen::Matrix<float, 6, 1> acc_body;
-    Eigen::Matrix<float, 12, 1> acc_feet;
-    getAccState(acc_body, acc_feet);
+    getAccState(acc_body);
 
     // linear optimization
     Eigen::Matrix<float, 6, 12> opt_A;
@@ -56,7 +59,6 @@ void Controller::sendCommand() {
 
     // feet pattern
     const auto D_vec = getGaitSet();
-    const int par_n = D_vec.size();
     multiQp_.multiSolve(opt_A, opt_b, grf_index_);
     const auto grf_qp_vec = multiQp_.getGrf();
     const auto cost_vec = multiQp_.getCost();
@@ -68,32 +70,33 @@ void Controller::sendCommand() {
     }
 
 //    static unsigned int s_ptime{0};
-//    s_ptime = (s_ptime+1) % (sample_t_*2);
+//    s_ptime = (s_ptime + 1) % (sample_t_ * 2);
 //    if (s_ptime == 0)
 //        grf_index_ = 1; // trot1
 //    if (s_ptime == sample_t_)
 //        grf_index_ = 2; // trot2
 
-//    grf_index_ = 1;
+//    grf_index_ = 0;
 
-    // swap legs
-    auto grf_in = grf_qp_vec[grf_index_];
+    // apply index
+    auto grf_qp = grf_qp_vec[grf_index_];
+    auto D = D_vec[grf_index_];
+    Eigen::Matrix<float, 12, 1> p_feet_desired_fp = getFpTarget();
+    Eigen::Matrix<float, 12, 1> feet_force_fp = getFpForce(p_feet_desired_fp);
+
+    // grf to feet force
+    Eigen::Matrix<float, 12, 1> feet_force_in = Eigen::Matrix<float, 12, 1>::Zero();
+    Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
     for (int i = 0; i < 4; i++) {
-        if (D_vec[grf_index_][i] == 1) {
-            grf_in.segment(3*i, 3) = acc_feet.segment(3*i, 3);
-        }
+        if (D[i] == 1)
+            feet_force_in.segment(3 * i, 3) = feet_force_fp.segment(3 * i, 3);
+        else
+            feet_force_in.segment(3 * i, 3) = kin_.R_imu_.transpose() * -grf_qp.segment(3 * i, 3);
     }
-    Eigen::Matrix<float, 12, 1> grf_qp;
-    float fil_const = 0.1;
-    for (int i=0; i<12; i++){
+    float fil_const{0.1};
+    for (int i = 0; i < 12; i++) {
         // todo: remove the filter, find a better transition
-        grf_qp(i) = lpFilterGrf_[i].firstOrder(grf_in(i), fil_const);
-    }
-
-    // grf to motor force
-    Eigen::Matrix<float, 12, 1> feet_force_grf;
-    for (int i = 0; i < 4; i++) {
-        feet_force_grf.segment(3 * i, 3) = kin_.R_imu_.transpose() * -grf_qp.segment(3 * i, 3);
+        feet_force_grf(i) = lpFilterGrf_[i].firstOrder(feet_force_in(i), fil_const);
     }
 
     // merge kinematics and grf control
@@ -166,22 +169,24 @@ void Controller::setMotorZero() {
 }
 
 void Controller::setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
-    for (int i = 0; i < 12; i++) {
-        lowCmd.motorCmd[i].torque = motor_torque[i];
+    for (int i = 0; i < 4; i++) {
+        lowCmd.motorCmd[3 * i + 0].torque = motor_torque[3 * i + 0] * fmin(fmax(time_ - 2, 0) / 5.0, 1);
+        lowCmd.motorCmd[3 * i + 1].torque = motor_torque[3 * i + 1] * fmin(fmax(time_ - 5, 0) / 5.0, 1);
+        lowCmd.motorCmd[3 * i + 2].torque = motor_torque[3 * i + 2] * fmin(fmax(time_ - 5, 0) / 5.0, 1);
     }
     for (int i = 0; i < 4; i++) {
         lowCmd.motorCmd[i * 3 + 0].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 0].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 0].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 0].velocityStiffness = fmin(time_ / 5.0, 1) * (0.08);
+        lowCmd.motorCmd[i * 3 + 0].velocityStiffness = fmin(time_ / 3.0, 1) * (0.1);
         lowCmd.motorCmd[i * 3 + 1].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 1].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 1].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = fmin(time_ / 5.0, 1) * (0.04);
+        lowCmd.motorCmd[i * 3 + 1].velocityStiffness = fmin(time_ / 3.0, 1) * (0.04);
         lowCmd.motorCmd[i * 3 + 2].position = PosStopF;
         lowCmd.motorCmd[i * 3 + 2].positionStiffness = 0;
         lowCmd.motorCmd[i * 3 + 2].velocity = 0;
-        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = fmin(time_ / 5.0, 1) * (0.02);
+        lowCmd.motorCmd[i * 3 + 2].velocityStiffness = fmin(time_ / 3.0, 1) * (0.02);
     }
 }
 
@@ -209,10 +214,29 @@ void Controller::updateStance() {
     }
 }
 
+Eigen::Matrix<float, 12, 1> Controller::getKinForceM(const Eigen::Matrix<float, 12, 1> &p_feet_desired,
+                                                     const Eigen::Matrix<float, 3, 3> &M) {
+    Eigen::Matrix<float, 12, 12> M_imu = Eigen::Matrix<float, 12, 12>::Zero();
+    for (int i = 0; i < 4; i++) {
+        M_imu.block(3 * i, 3 * i, 3, 3) = M;
+    }
+    Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - M_imu * kin_.p_feet_;
+    Eigen::Matrix<float, 12, 1> feet_force_kin = kp_kin_ * p_feet_error;
+
+    return M_imu.transpose() * feet_force_kin;
+}
+
 Eigen::Matrix<float, 12, 1> Controller::getKinForce(const Eigen::Matrix<float, 12, 1> &p_feet_desired) {
-    Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - kin_.p_feet_;
-    Eigen::Matrix<float, 12, 1> feet_force_kin = fmin(time_ / 10.0, 1) * kp_kin_ * p_feet_error;
-    return feet_force_kin;
+    auto M = Eigen::Matrix3f::Identity();
+    return getKinForceM(p_feet_desired, M);
+}
+
+Eigen::Matrix<float, 12, 1> Controller::getFpForce(const Eigen::Matrix<float, 12, 1> &p_feet_desired) {
+    auto R_rp = kin_.R_yaw_.transpose() * kin_.R_imu_;
+    static unsigned int s_ptime{0};
+    s_ptime = (s_ptime + 1) % sample_t_;
+    float k_w = fmin(1, fmax(0, float(s_ptime) / sample_t_));
+    return getKinForceM(p_feet_desired, R_rp) * k_w;
 }
 
 void Controller::getDynMat(Eigen::Matrix<float, 3, 12> &Mat_lin,
@@ -235,34 +259,35 @@ float Controller::getGroundWeight() {
     return ground_weight;
 }
 
-
 Eigen::Matrix<float, 12, 1> Controller::getFpTarget() {
     Eigen::Matrix<float, 12, 1> p_feet_desired_fp(p_feet_default_);
     for (int i = 0; i < 4; i++) {
-        float k_x{0.1};
-        float k_y{0.2};
-        float height_z{0.08};
+        float k_x{0.0f};
+        float k_y{0.2f};
+        float height_z{0.1};
+        Eigen::Matrix<float, 3, 1> p_feet_temp;
+        Eigen::Matrix<float, 3, 1> p_feet_gain;
+        p_feet_temp << vel_x_, vel_y_, height_z;
+        p_feet_gain << k_x, k_y, 1;
         Eigen::Matrix<float, 3, 1> p_feet_delta;
-        p_feet_delta << vel_x_ * k_x,
-                vel_y_ * k_y,
-                height_z;
-        p_feet_desired_fp.segment(3 * i, 3) += kin_.R_yaw_.transpose() * p_feet_delta;
+        Eigen::Matrix<float, 3, 1> bodySpeed_offset;
+        bodySpeed_offset << 0.01 + kt_[2], 0.005 + kt_[3], 0;
+        p_feet_delta = (kin_.R_yaw_.transpose() * p_feet_temp).array()*p_feet_gain.array() + bodySpeed_offset.array();
+        p_feet_desired_fp.segment(3 * i, 3) += p_feet_delta;
     }
-
     return p_feet_desired_fp;
 }
 
-
-void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body, Eigen::Matrix<float, 12, 1> &acc_feet) {
+void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body) {
     Eigen::DiagonalMatrix<float, 6> kp_body, kd_body;
-    kp_body.diagonal() << 700 * .0, 700 * .0, 7000, 300, 300, 300;
-    kd_body.diagonal() << 30, 30, 0, 0, 0, 0.5;
+    kp_body.diagonal() << 700 * .0, 700 * .0, 7000, 300, 300, 30;
+    kd_body.diagonal() << 10, 30, 0, 0, 0, 1;
     Eigen::Matrix<float, 6, 1> desired_pos_body, pos_body, vel_body;
     Eigen::Matrix<float, 3, 1> bodySpeed_offset;
     desired_pos_body << 0, 0, 0.4,
-            (1.2 + kp_[0]) * float(M_PI) / 180,
+            (0 + kp_[0]) * float(M_PI) / 180,
             (0 + kp_[1]) * float(M_PI) / 180,
-            (0 + kp_[2]) * float(M_PI) / 180 + yaw_offset_;
+            (0 + kp_[2]) * float(M_PI) / 180;
     pos_body << est_.worldState_.bodyPosition.x,
             est_.worldState_.bodyPosition.y,
             est_.worldState_.bodyPosition.z,
@@ -271,23 +296,10 @@ void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body, Eigen::Matrix
             est_.worldState_.bodySpeed.y,
             est_.worldState_.bodySpeed.z,
             kin_.dq_imu_;
-    bodySpeed_offset << 0.00+kt_[0], 0.00+kt_[1], 0;
+    bodySpeed_offset << 0.00 + kt_[0], 0.00 + kt_[1], 0;
     vel_body.segment(0, 3) += kin_.R_yaw_ * bodySpeed_offset;
-    acc_body = fmin(time_ / 10.0, 1) * (kp_body * (desired_pos_body - pos_body) - kd_body * vel_body);
     // todo: add gravity. Note: since the mass is simplify, the g is not 9.8, need to tune it.
-
-    // foot placement
-    Eigen::Matrix<float, 12, 1> p_feet_desired_fp = getFpTarget();
-
-    static unsigned int s_ptime{0};
-    s_ptime = (s_ptime+1)%sample_t_;
-    float k_w = fmin(1, fmax(0, float(s_ptime)/sample_t_));
-    auto feet_force_fp = getKinForce(p_feet_desired_fp) * k_w;
-    //todo: the desired feet should be in world frame not in body frame
-    for (int i = 0; i < 4; i++) {
-        // attention: the grf is opposite of the motor force
-        acc_feet.segment(3 * i, 3) = kin_.R_imu_ * -feet_force_fp.segment(3 * i, 3);
-    }
+    acc_body = kp_body * (desired_pos_body - pos_body) - kd_body * vel_body;
 }
 
 const std::vector<Eigen::Matrix<int, 4, 1>> &Controller::getGaitSet() {
@@ -298,44 +310,40 @@ const std::vector<Eigen::Matrix<int, 4, 1>> &Controller::getGaitSet() {
     auto D_step_FL = Eigen::Matrix<int, 4, 1>{0, 1, 0, 0};
     auto D_step_RR = Eigen::Matrix<int, 4, 1>{0, 0, 1, 0};
     auto D_step_RL = Eigen::Matrix<int, 4, 1>{0, 0, 0, 1};
-//    static std::vector<Eigen::Matrix<int, 4, 1>> D_vec{D_stance, D_trot1, D_trot2,
-//                                                  D_step_FR, D_step_FL, D_step_RR, D_step_RL};
-    static std::vector<Eigen::Matrix<int, 4, 1>> D_vec{D_stance, D_step_FR, D_step_FL, D_step_RR, D_step_RL};
+    static std::vector<Eigen::Matrix<int, 4, 1>> D_vec{D_stance, D_trot1, D_trot2,
+                                                       D_step_FR, D_step_FL, D_step_RR, D_step_RL};
+//    static std::vector<Eigen::Matrix<int, 4, 1>> D_vec{D_stance, D_step_FR, D_step_FL, D_step_RR, D_step_RL};
     return D_vec;
 }
 
 int Controller::getGaitIndex(const std::vector<Eigen::Matrix<int, 4, 1>> &D_vec, const std::vector<float> &cost_vec) {
     Eigen::Matrix<float, 12, 1> p_feet_desired_fp = getFpTarget();
-    Eigen::Matrix<float, 3, 3> R_yaw_offset;
-    float yaw_offset = (0 + kp_[2]) * float(M_PI) / 180 + yaw_offset_; // todo: related to getAccState();
-    R_yaw_offset << cos(yaw_offset), -sin(yaw_offset), 0,
-            sin(yaw_offset), cos(yaw_offset), 0,
-            0, 0, 1;
+    auto R_rp = kin_.R_yaw_.transpose() * kin_.R_imu_;
     std::vector<float> feet_error_sums{};
     std::vector<float> total_cost_vec{};
     float feet_err_weight = 200;
-    if (abs(kt_[0])>0.02 or abs(kt_[1])>0.02) // todo: a better way
+    if (abs(kt_[0]) > 0.02 or abs(kt_[1]) > 0.02) // todo: a better way
         feet_err_weight *= 2;
 
     const int par_n = D_vec.size();
-    for (int j=0; j<par_n; j++) {
+    for (int j = 0; j < par_n; j++) {
         float sum{0};
         for (int i = 0; i < 4; i++) {
             //todo: consider yaw in error, check the yaw offset, desired yaw and swing foot reference
             // the default should consider swing foot placement
             // might consider use square
             auto p_feet_error = (p_feet_desired_fp.segment(3 * i, 3) -
-                                 R_yaw_offset.transpose() * kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3)).cwiseAbs();
+                                 R_rp * kin_.p_feet_.segment(3 * i, 3)).cwiseAbs();
             if (D_vec[j][i] == 0) {
                 sum += p_feet_error(0);
                 sum += p_feet_error(1);
             }
         }
         feet_error_sums.push_back(sum);
-        total_cost_vec.push_back(sum*feet_err_weight + cost_vec[j]);
+        total_cost_vec.push_back(sum * feet_err_weight + cost_vec[j]);
     }
 
-    return std::min_element(total_cost_vec.begin(),total_cost_vec.end()) - total_cost_vec.begin();;
+    return std::min_element(total_cost_vec.begin(), total_cost_vec.end()) - total_cost_vec.begin();;
 }
 
 

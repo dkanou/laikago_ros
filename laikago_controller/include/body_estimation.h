@@ -31,7 +31,7 @@ private:
     Eigen::Matrix<float, 18, 3> _B;
     Eigen::Matrix<float, 28, 18> _C;
     const float low_{30};
-    const float high_{40};
+    const float high_{50};
     bool is_stance_{false};
     ros::Publisher worldState_pub_;
 };

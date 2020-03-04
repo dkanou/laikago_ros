@@ -45,12 +45,15 @@ public:
 private:
     void setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque);
     void updateStance();
+    Eigen::Matrix<float, 12, 1> getKinForceM(const Eigen::Matrix<float, 12, 1>&p_feet_desired,
+                                             const Eigen::Matrix<float, 3, 3> &M);
     Eigen::Matrix<float, 12, 1> getKinForce(const Eigen::Matrix<float, 12, 1>& p_feet_desired);
+    Eigen::Matrix<float, 12, 1> getFpForce(const Eigen::Matrix<float, 12, 1>& p_feet_desired);
     void getDynMat(Eigen::Matrix<float, 3, 12> &Mat_lin,
                    Eigen::Matrix<float, 3, 12> &Mat_rot);
     float getGroundWeight();
     Eigen::Matrix<float, 12, 1> getFpTarget();
-    void getAccState(Eigen::Matrix<float, 6, 1>& acc_body, Eigen::Matrix<float, 12, 1>& acc_feet);
+    void getAccState(Eigen::Matrix<float, 6, 1> &acc_body);
     int getGaitIndex(const std::vector<Eigen::Matrix<int, 4, 1>>&D_vec, const std::vector<float> &cost_vec);
     static Eigen::Matrix3f conjMatrix(const Eigen::Vector3f &vec);
 
@@ -65,7 +68,7 @@ private:
     ros::Subscriber param_sub_;
     ros::Publisher controlState_pub_;
     laikago_msgs::ControlState controlState_;
-    const float kp_kin_{1500};
+    float kp_kin_{1200};
     float kp_[3]{0, 0, 0};
     float kd_[3]{0, 0, 0};
     float kt_[6]{};
