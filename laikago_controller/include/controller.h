@@ -7,6 +7,7 @@
 #include "body_estimation.h"
 #include "kinematics.h"
 #include "laikago_msgs/GainParam.h"
+#include "laikago_msgs/ControlState.h"
 #include "qp_solver.h"
 
 using namespace casadi;
@@ -46,9 +47,7 @@ private:
     void updateStance();
     Eigen::Matrix<float, 12, 1> getKinForce(const Eigen::Matrix<float, 12, 1>& p_feet_desired);
     void getDynMat(Eigen::Matrix<float, 3, 12> &Mat_lin,
-                   Eigen::Matrix<float, 3, 12> &Mat_rot,
-                   Eigen::Matrix<float, 12, 12> &Mat_force,
-                   Eigen::DiagonalMatrix<float, 12> &Mat_force_weight);
+                   Eigen::Matrix<float, 3, 12> &Mat_rot);
     float getGroundWeight();
     Eigen::Matrix<float, 12, 1> getFpTarget();
     void getAccState(Eigen::Matrix<float, 6, 1>& acc_body, Eigen::Matrix<float, 12, 1>& acc_feet);
@@ -56,13 +55,16 @@ private:
     static Eigen::Matrix3f conjMatrix(const Eigen::Vector3f &vec);
 
     float time_{0};
+    static constexpr int sample_t_{175}; // 175*0.002 = 0.35s(~3Hz) half period
     Kinematics kin_;
     BodyPoseEstimator est_;
     Eigen::Matrix<float, 12, 1> p_feet_default_;
     MultiQp multiQp_;
     unsigned int grf_index_{0};
     ros::NodeHandle &n_;
-    ros::Subscriber param_sub;
+    ros::Subscriber param_sub_;
+    ros::Publisher controlState_pub_;
+    laikago_msgs::ControlState controlState_;
     const float kp_kin_{1500};
     float kp_[3]{0, 0, 0};
     float kd_[3]{0, 0, 0};
@@ -70,8 +72,10 @@ private:
     bool is_stance_{false};
     float yaw_offset_{0};
     float control_switch_weight_{0};
-    LowPassFilter lowPassFilter_[12];
-    LowPassFilter lowPassFilterVel_[2];
+    LowPassFilter lpFilterGrf_[12];
+    LowPassFilter lpFilterVel_[3];
+    float vel_x_{0};
+    float vel_y_{0};
 };
 
 

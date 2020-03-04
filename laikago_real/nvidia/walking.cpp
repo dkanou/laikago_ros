@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
         // finish one iteration
         ros::spinOnce();
         loop_rate.sleep();
-        printf("time = %f\n", loop_rate.cycleTime().toSec());
+//        printf("time = %f\n", loop_rate.cycleTime().toSec());
     }
     return 0;
 }

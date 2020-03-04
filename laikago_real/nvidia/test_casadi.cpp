@@ -11,7 +11,7 @@ int main(int argc, char *argv[]) {
     Eigen::MatrixXf A = Eigen::MatrixXf::Identity(6, 12);
     Eigen::MatrixXf b = Eigen::MatrixXf::Ones(6, 1);
 //    Eigen::MatrixXf D = Eigen::MatrixXf::Ones(12, 1);
-    Eigen::MatrixXf D = Eigen::MatrixXf::Zero(4, 1);
+    Eigen::MatrixXi D = Eigen::MatrixXi::Zero(4, 1);
     QpProblem qpProblem;
     auto res = qpProblem.solve(A, b, D);
     auto u = res.first;

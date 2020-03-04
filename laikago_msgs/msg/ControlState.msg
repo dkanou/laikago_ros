@@ -1,0 +1,3 @@
+Cartesian bodyPosition
+Cartesian bodySpeed
+Cartesian bodySpeedFiltered

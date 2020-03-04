@@ -45,11 +45,11 @@ BodyPoseEstimator::BodyPoseEstimator() {
 
 void BodyPoseEstimator::update() {
 
-    float process_noise_pimu = 0.02;
-    float process_noise_vimu = 0.02;
+    float process_noise_pimu = 0.2;
+    float process_noise_vimu = 0.2;
     float process_noise_pfoot = 0.0002;
     float sensor_noise_pimu_rel_foot = 0.001;
-    float sensor_noise_vimu_rel_foot = 0.1*1e3;
+    float sensor_noise_vimu_rel_foot = 0.1;
     float sensor_noise_zfoot = 0.001;
 
     Eigen::Matrix<float, 18, 18> Q = Eigen::Matrix<float, 18, 18>::Identity();
@@ -78,6 +78,8 @@ void BodyPoseEstimator::update() {
     a << lowState.imu.acceleration[0],
             lowState.imu.acceleration[1],
             lowState.imu.acceleration[2];
+    const float imu_cali{9.81 / 10};
+    a = imu_cali * a;
     a = Rbod * a + Eigen::Vector3f{0.0f, 0.0f, -9.81f};
     Eigen::Vector4f pzs = Eigen::Vector4f::Zero();
     Eigen::Vector4f trusts = Eigen::Vector4f::Zero();

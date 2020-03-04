@@ -16,7 +16,7 @@ void Kinematics::updateEigenState() {
                                   lowState.imu.quaternion[2],
                                   lowState.imu.quaternion[3]);
     R_imu_ = quaternion.toRotationMatrix();
-    float yaw = lowState.imu.rpy[2] * M_PI / 180.0f;
+    float yaw = lowState.imu.rpy[2] * float(M_PI) / 180.0f;
     R_yaw_ << cos(yaw), -sin(yaw), 0,
             sin(yaw), cos(yaw), 0,
             0, 0, 1;
