@@ -34,12 +34,12 @@ void Controller::sendCommand() {
     setMotorZero();
 
     // force from feet kinematics
-    Eigen::Matrix<float, 12, 1> p_feet_desired(p_feet_default_);
+    Vector12f p_feet_desired(p_feet_default_);
     p_feet_desired(0 + 1) -= 0.03;
     p_feet_desired(3 + 1) += 0.03;
     p_feet_desired(6 + 1) -= 0.03;
     p_feet_desired(9 + 1) += 0.03;
-    Eigen::Matrix<float, 12, 1> feet_force_kin = getKinForce(p_feet_desired);
+    Vector12f feet_force_kin = getKinForce(p_feet_desired);
 
     // matrix of feet force to acceleration
     Eigen::Matrix<float, 3, 12> Mat_lin;
@@ -47,7 +47,7 @@ void Controller::sendCommand() {
     getDynMat(Mat_lin, Mat_rot);
 
     // acceleration
-    Eigen::Matrix<float, 6, 1> acc_body;
+    Vector6f acc_body;
     getAccState(acc_body);
 
     // linear optimization
@@ -81,12 +81,12 @@ void Controller::sendCommand() {
     // apply index
     auto grf_qp = grf_qp_vec[grf_index_];
     auto D = D_vec[grf_index_];
-    Eigen::Matrix<float, 12, 1> p_feet_desired_fp = getFpTarget();
-    Eigen::Matrix<float, 12, 1> feet_force_fp = getFpForce(p_feet_desired_fp);
+    Vector12f p_feet_desired_fp = getFpTarget();
+    Vector12f feet_force_fp = getFpForce(p_feet_desired_fp);
 
     // grf to feet force
-    Eigen::Matrix<float, 12, 1> feet_force_in = Eigen::Matrix<float, 12, 1>::Zero();
-    Eigen::Matrix<float, 12, 1> feet_force_grf = Eigen::Matrix<float, 12, 1>::Zero();
+    Vector12f feet_force_in = Vector12f::Zero();
+    Vector12f feet_force_grf = Vector12f::Zero();
     for (int i = 0; i < 4; i++) {
         if (D[i] == 1)
             feet_force_in.segment(3 * i, 3) = feet_force_fp.segment(3 * i, 3);
@@ -100,16 +100,16 @@ void Controller::sendCommand() {
     }
 
     // merge kinematics and grf control
-    Eigen::Matrix<float, 12, 1> feet_force;
+    Vector12f feet_force;
 //    feet_force = feet_force_kin;
     feet_force = (1 - kt_[5]) * feet_force_kin + kt_[5] * feet_force_grf;
 //    double ground_weight = getGroundWeight();
 //    feet_force = (1 - ground_weight) * feet_force_kin + ground_weight * feet_force_grf;
 
     // convert to torque
-    Eigen::Matrix<float, 12, 1> motor_torque;
+    Vector12f motor_torque;
     motor_torque = kin_.J_feet_.transpose() * feet_force;
-    Eigen::Vector4f torque_hip_gravity;
+    Vector4f torque_hip_gravity;
     torque_hip_gravity << -0.86, +0.86, -0.86, +0.86;
     for (int i = 0; i < 4; i++) {
         motor_torque[i * 3 + 0] += torque_hip_gravity[i];
@@ -123,15 +123,15 @@ void Controller::sendCommandPD() {
     est_.publish();
     setMotorZero();
 
-    Eigen::Vector4f torque_hip_gravity;
+    Vector4f torque_hip_gravity;
     torque_hip_gravity << -0.86, +0.86, -0.86, +0.86;
-    Eigen::Vector4f pos_hip;
+    Vector4f pos_hip;
     pos_hip << 0.0, 0.0, 0.0, 0.0;
-    Eigen::Vector4f pos_thigh;
+    Vector4f pos_thigh;
     pos_thigh << 0.67, 0.67, 0.67, 0.67;
-    Eigen::Vector4f pos_calf;
+    Vector4f pos_calf;
     pos_calf << -1.3, -1.3, -1.3, -1.3;
-    Eigen::Matrix<float, 12, 1> motor_torque = Eigen::Matrix<float, 12, 1>::Zero();
+    Vector12f motor_torque = Vector12f::Zero();
     for (int i = 0; i < 4; i++) {
         motor_torque[i * 3 + 0] = torque_hip_gravity[i];
         motor_torque[i * 3 + 0] += fmin(time_ / 10.0, 1) * 100 * (pos_hip[i] - kin_.q_motor_[i * 3 + 0]);
@@ -168,7 +168,7 @@ void Controller::setMotorZero() {
     }
 }
 
-void Controller::setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
+void Controller::setTorque(const Vector12f &motor_torque) {
     for (int i = 0; i < 4; i++) {
         lowCmd.motorCmd[3 * i + 0].torque = motor_torque[3 * i + 0] * fmin(fmax(time_ - 2, 0) / 5.0, 1);
         lowCmd.motorCmd[3 * i + 1].torque = motor_torque[3 * i + 1] * fmin(fmax(time_ - 5, 0) / 5.0, 1);
@@ -190,8 +190,8 @@ void Controller::setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque) {
     }
 }
 
-Eigen::Matrix3f Controller::conjMatrix(const Eigen::Vector3f &vec) {
-    Eigen::Matrix3f mat;
+Matrix3f Controller::conjMatrix(const Vector3f &vec) {
+    Matrix3f mat;
     mat << 0, -vec[2], vec[1],
             vec[2], 0, -vec[0],
             -vec[1], vec[0], 0;
@@ -214,24 +214,24 @@ void Controller::updateStance() {
     }
 }
 
-Eigen::Matrix<float, 12, 1> Controller::getKinForceM(const Eigen::Matrix<float, 12, 1> &p_feet_desired,
-                                                     const Eigen::Matrix<float, 3, 3> &M) {
-    Eigen::Matrix<float, 12, 12> M_imu = Eigen::Matrix<float, 12, 12>::Zero();
+Vector12f Controller::getKinForceM(const Vector12f &p_feet_desired,
+                                                     const Matrix3f &M) {
+    Matrix12f M_imu = Matrix12f::Zero();
     for (int i = 0; i < 4; i++) {
         M_imu.block(3 * i, 3 * i, 3, 3) = M;
     }
-    Eigen::Matrix<float, 12, 1> p_feet_error = p_feet_desired - M_imu * kin_.p_feet_;
-    Eigen::Matrix<float, 12, 1> feet_force_kin = kp_kin_ * p_feet_error;
+    Vector12f p_feet_error = p_feet_desired - M_imu * kin_.p_feet_;
+    Vector12f feet_force_kin = kp_kin_ * p_feet_error;
 
     return M_imu.transpose() * feet_force_kin;
 }
 
-Eigen::Matrix<float, 12, 1> Controller::getKinForce(const Eigen::Matrix<float, 12, 1> &p_feet_desired) {
-    auto M = Eigen::Matrix3f::Identity();
+Vector12f Controller::getKinForce(const Vector12f &p_feet_desired) {
+    auto M = Matrix3f::Identity();
     return getKinForceM(p_feet_desired, M);
 }
 
-Eigen::Matrix<float, 12, 1> Controller::getFpForce(const Eigen::Matrix<float, 12, 1> &p_feet_desired) {
+Vector12f Controller::getFpForce(const Vector12f &p_feet_desired) {
     auto R_rp = kin_.R_yaw_.transpose() * kin_.R_imu_;
     static unsigned int s_ptime{0};
     s_ptime = (s_ptime + 1) % sample_t_;
@@ -242,8 +242,8 @@ Eigen::Matrix<float, 12, 1> Controller::getFpForce(const Eigen::Matrix<float, 12
 void Controller::getDynMat(Eigen::Matrix<float, 3, 12> &Mat_lin,
                            Eigen::Matrix<float, 3, 12> &Mat_rot) {
     for (int i = 0; i < 4; i++) {
-        Mat_lin.block(0, 3 * i, 3, 3) = Eigen::Matrix3f::Identity();
-        Eigen::Vector3f foot_world = kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3);
+        Mat_lin.block(0, 3 * i, 3, 3) = Matrix3f::Identity();
+        Vector3f foot_world = kin_.R_imu_ * kin_.p_feet_.segment(3 * i, 3);
         Mat_rot.block(0, 3 * i, 3, 3) = kin_.R_yaw_.transpose() * conjMatrix(foot_world);
     }
 }
@@ -259,18 +259,18 @@ float Controller::getGroundWeight() {
     return ground_weight;
 }
 
-Eigen::Matrix<float, 12, 1> Controller::getFpTarget() {
-    Eigen::Matrix<float, 12, 1> p_feet_desired_fp(p_feet_default_);
+Vector12f Controller::getFpTarget() {
+    Vector12f p_feet_desired_fp(p_feet_default_);
     for (int i = 0; i < 4; i++) {
         float k_x{0.0f};
         float k_y{0.2f};
         float height_z{0.1};
-        Eigen::Matrix<float, 3, 1> p_feet_temp;
-        Eigen::Matrix<float, 3, 1> p_feet_gain;
+        Vector3f p_feet_temp;
+        Vector3f p_feet_gain;
         p_feet_temp << vel_x_, vel_y_, height_z;
         p_feet_gain << k_x, k_y, 1;
-        Eigen::Matrix<float, 3, 1> p_feet_delta;
-        Eigen::Matrix<float, 3, 1> bodySpeed_offset;
+        Vector3f p_feet_delta;
+        Vector3f bodySpeed_offset;
         bodySpeed_offset << 0.01 + kt_[2], 0.005 + kt_[3], 0;
         p_feet_delta = (kin_.R_yaw_.transpose() * p_feet_temp).array()*p_feet_gain.array() + bodySpeed_offset.array();
         p_feet_desired_fp.segment(3 * i, 3) += p_feet_delta;
@@ -278,12 +278,12 @@ Eigen::Matrix<float, 12, 1> Controller::getFpTarget() {
     return p_feet_desired_fp;
 }
 
-void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body) {
+void Controller::getAccState(Vector6f &acc_body) {
     Eigen::DiagonalMatrix<float, 6> kp_body, kd_body;
     kp_body.diagonal() << 700 * .0, 700 * .0, 7000, 300, 300, 30;
     kd_body.diagonal() << 10, 30, 0, 0, 0, 1;
-    Eigen::Matrix<float, 6, 1> desired_pos_body, pos_body, vel_body;
-    Eigen::Matrix<float, 3, 1> bodySpeed_offset;
+    Vector6f desired_pos_body, pos_body, vel_body;
+    Vector3f bodySpeed_offset;
     desired_pos_body << 0, 0, 0.4,
             (0 + kp_[0]) * float(M_PI) / 180,
             (0 + kp_[1]) * float(M_PI) / 180,
@@ -302,22 +302,22 @@ void Controller::getAccState(Eigen::Matrix<float, 6, 1> &acc_body) {
     acc_body = kp_body * (desired_pos_body - pos_body) - kd_body * vel_body;
 }
 
-const std::vector<Eigen::Matrix<int, 4, 1>> &Controller::getGaitSet() {
-    auto D_stance = Eigen::Matrix<int, 4, 1>{0, 0, 0, 0};
-    auto D_trot1 = Eigen::Matrix<int, 4, 1>{1, 0, 0, 1};
-    auto D_trot2 = Eigen::Matrix<int, 4, 1>{0, 1, 1, 0};
-    auto D_step_FR = Eigen::Matrix<int, 4, 1>{1, 0, 0, 0};
-    auto D_step_FL = Eigen::Matrix<int, 4, 1>{0, 1, 0, 0};
-    auto D_step_RR = Eigen::Matrix<int, 4, 1>{0, 0, 1, 0};
-    auto D_step_RL = Eigen::Matrix<int, 4, 1>{0, 0, 0, 1};
-    static std::vector<Eigen::Matrix<int, 4, 1>> D_vec{D_stance, D_trot1, D_trot2,
+const std::vector<Eigen::Vector4i> &Controller::getGaitSet() {
+    auto D_stance = Eigen::Vector4i{0, 0, 0, 0};
+    auto D_trot1 = Eigen::Vector4i{1, 0, 0, 1};
+    auto D_trot2 = Eigen::Vector4i{0, 1, 1, 0};
+    auto D_step_FR = Eigen::Vector4i{1, 0, 0, 0};
+    auto D_step_FL = Eigen::Vector4i{0, 1, 0, 0};
+    auto D_step_RR = Eigen::Vector4i{0, 0, 1, 0};
+    auto D_step_RL = Eigen::Vector4i{0, 0, 0, 1};
+    static std::vector<Eigen::Vector4i> D_vec{D_stance, D_trot1, D_trot2,
                                                        D_step_FR, D_step_FL, D_step_RR, D_step_RL};
-//    static std::vector<Eigen::Matrix<int, 4, 1>> D_vec{D_stance, D_step_FR, D_step_FL, D_step_RR, D_step_RL};
+//    static std::vector<Eigen::Vector4i> D_vec{D_stance, D_step_FR, D_step_FL, D_step_RR, D_step_RL};
     return D_vec;
 }
 
-int Controller::getGaitIndex(const std::vector<Eigen::Matrix<int, 4, 1>> &D_vec, const std::vector<float> &cost_vec) {
-    Eigen::Matrix<float, 12, 1> p_feet_desired_fp = getFpTarget();
+int Controller::getGaitIndex(const std::vector<Eigen::Vector4i> &D_vec, const std::vector<float> &cost_vec) {
+    Vector12f p_feet_desired_fp = getFpTarget();
     auto R_rp = kin_.R_yaw_.transpose() * kin_.R_imu_;
     std::vector<float> feet_error_sums{};
     std::vector<float> total_cost_vec{};

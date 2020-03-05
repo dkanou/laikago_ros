@@ -7,20 +7,15 @@
 #include "laikago_sdk/laikago_sdk.hpp"
 #include "controller.h"
 
-using namespace laikago;
+namespace lk = laikago;
 
-static long motiontime = 0;
-float Kv[3] = {0};
-float Kp[3] = {0};
-float movejoint1 = 0, movejoint2 = 0;
-unsigned long int Tpi = 0;
-LowCmd SendLowLCM = {0};
-LowState RecvLowLCM = {0};
+lk::LowCmd SendLowLCM = {0};
+lk::LowState RecvLowLCM = {0};
 laikago_msgs::LowCmd SendLowROS;
 laikago_msgs::LowState RecvLowROS;
 
-Control control(LOWLEVEL);
-LCM roslcm;
+lk::Control control(lk::LOWLEVEL);
+lk::LCM roslcm;
 boost::mutex mutex;
 
 void *update_loop(void *data) {
@@ -51,7 +46,7 @@ int main(int argc, char *argv[]) {
     ros::Publisher lowState_pub = n.advertise<laikago_msgs::LowState>("/laikago_gazebo/lowState/state", 1);
     ros::Publisher highState_pub = n.advertise<laikago_msgs::HighState>("/laikago_gazebo/highState/state", 1);
 
-    SendLowROS.levelFlag = LOWLEVEL;
+    SendLowROS.levelFlag = lk::LOWLEVEL;
     for (int i = 1; i < 13; i++) {
         SendLowROS.motorCmd[i].mode = 0x0A;   // motor switch to servo (PMSM) mode
     }
@@ -60,7 +55,6 @@ int main(int argc, char *argv[]) {
     double begin_time = ros::Time::now().toSec();
 
     while (ros::ok()) {
-        motiontime++;
         roslcm.Get(RecvLowLCM);
         memcpy(&RecvLowROS, &RecvLowLCM, sizeof(RecvLowROS));
 

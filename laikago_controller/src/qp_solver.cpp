@@ -33,7 +33,7 @@ QpProblem::QpProblem() {
     opti_par_f_ = opti_f_.map(7, "thread", 12);
 }
 
-std::pair<Eigen::Matrix<float, 12, 1>, float> QpProblem::solve(const Eigen::MatrixXf &A,
+std::pair<Vector12f , float> QpProblem::solve(const Eigen::MatrixXf &A,
                                                                const Eigen::MatrixXf &b,
                                                                const Eigen::MatrixXi &D) {
     DM dm_A(Sparsity::dense(A.rows(), A.cols()),
@@ -46,14 +46,14 @@ std::pair<Eigen::Matrix<float, 12, 1>, float> QpProblem::solve(const Eigen::Matr
     std::vector<DM> sol = opti_f_(std::vector<DM>{dm_A, dm_b, dm_D});
 
     std::vector<float> vector_u(sol[0].nonzeros().begin(), sol[0].nonzeros().end());
-    Eigen::Matrix<float, 12, 1> u(vector_u.data());
+    Vector12f u(vector_u.data());
     float cost = sol[1].nonzeros().at(0);
     return {u, cost};
 }
 
-MultiQp::MultiQp(const std::vector<Eigen::Matrix<int, 4, 1>> &D_vec) :
+MultiQp::MultiQp(const std::vector<Eigen::Vector4i> &D_vec) :
         D_vec_(D_vec), par_n_(D_vec.size()) {
-    grf_qp_vec_ = std::vector<Eigen::Matrix<float, 12, 1>>(par_n_, Eigen::Matrix<float, 12, 1>::Zero());
+    grf_qp_vec_ = std::vector<Vector12f>(par_n_, Vector12f::Zero());
     cost_vec_ = std::vector<float>(par_n_, 0);
 }
 

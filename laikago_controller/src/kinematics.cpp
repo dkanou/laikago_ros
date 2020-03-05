@@ -31,6 +31,7 @@ void Kinematics::updateEigenState() {
 }
 
 void Kinematics::updateKinematics() {
+    // todo: use the same conversion as qp_solver does
     DM dm_q_motor{std::vector<double>(q_motor_.data(), q_motor_.size() + q_motor_.data())};
     DMDict feet_dict = f_kinBodyFeet_(DMDict{{"q", dm_q_motor}});
     Eigen::Map<Eigen::Matrix<double, 12, 1>> temp_p_feet(feet_dict["p_feet"].ptr(), 12);
@@ -53,11 +54,11 @@ void Kinematics::updateKinematics() {
 
 void Kinematics::updateFootForce() {
     for (int i = 0; i < 4; i++) {
-        Eigen::Matrix<float, 3, 3> R_foot_world;
+        Matrix3f R_foot_world;
         R_foot_world = R_imu_ * R_feet_.block(i * 3, 0, 3, 3);
-        Eigen::Matrix<float, 3, 1> eeForce_vec;
+        Vector3f eeForce_vec;
         eeForce_vec << lowState.eeForce[i].x, lowState.eeForce[i].y, lowState.eeForce[i].z;
-        Eigen::Matrix<float, 3, 1> eeForce_vec_world;
+        Vector3f eeForce_vec_world;
         eeForce_vec_world = R_foot_world * eeForce_vec;
         lowState.footForce[i] = eeForce_vec_world[2];
     }

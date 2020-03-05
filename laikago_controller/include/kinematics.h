@@ -4,6 +4,7 @@
 #include <casadi/casadi.hpp>
 #include <Eigen/Geometry>
 #include "body.h"
+#include "eigen_def.h"
 
 using namespace casadi;
 using laikago_model::lowCmd;
@@ -41,15 +42,15 @@ public:
         std::cout << lowCmd << std::endl;
     }
 
-    Eigen::Matrix<float, 3, 1> q_imu_;
-    Eigen::Matrix<float, 3, 1> dq_imu_;
-    Eigen::Matrix<float, 3, 3> R_imu_;
-    Eigen::Matrix<float, 3, 3> R_yaw_;
-    Eigen::Matrix<float, 12, 1> q_motor_;
-    Eigen::Matrix<float, 12, 1> dq_motor_;
-    Eigen::Matrix<float, 12, 1> p_feet_;
-    Eigen::Matrix<float, 12, 1> dp_feet_;
-    Eigen::Matrix<float, 12, 12> J_feet_;
+    Vector3f q_imu_;
+    Vector3f dq_imu_;
+    Matrix3f R_imu_;
+    Matrix3f R_yaw_;
+    Vector12f q_motor_;
+    Vector12f dq_motor_;
+    Vector12f p_feet_;
+    Vector12f dp_feet_;
+    Matrix12f J_feet_;
     Eigen::Matrix<float, 12, 3> R_feet_;
     static bool sim;
 private:

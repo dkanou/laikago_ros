@@ -5,6 +5,7 @@
 #include <Eigen/Dense>
 #include "body.h"
 #include "body_estimation.h"
+#include "eigen_def.h"
 #include "kinematics.h"
 #include "laikago_msgs/GainParam.h"
 #include "laikago_msgs/ControlState.h"
@@ -29,39 +30,55 @@ public:
     Controller(ros::NodeHandle *n);
 
     void paramCallback(const laikago_msgs::GainParam &msg);
+
     void sendCommand();
+
     void sendCommandPD();
+
     void setTime(const double &time);
+
     static void setMotorZero();
-    static const std::vector<Eigen::Matrix<int, 4, 1>>& getGaitSet();
+
+    static const std::vector<Eigen::Vector4i> &getGaitSet();
 
     static void __attribute__ ((used)) printMat(const Eigen::Matrix<float, 3, 12> &mat) {
         std::cout << mat << std::endl;
     }
+
     static void __attribute__ ((used)) printMat(const Eigen::MatrixXf &mat) {
         std::cout << mat << std::endl;
     }
 
 private:
-    void setTorque(const Eigen::Matrix<float, 12, 1> &motor_torque);
+    void setTorque(const Vector12f &motor_torque);
+
     void updateStance();
-    Eigen::Matrix<float, 12, 1> getKinForceM(const Eigen::Matrix<float, 12, 1>&p_feet_desired,
-                                             const Eigen::Matrix<float, 3, 3> &M);
-    Eigen::Matrix<float, 12, 1> getKinForce(const Eigen::Matrix<float, 12, 1>& p_feet_desired);
-    Eigen::Matrix<float, 12, 1> getFpForce(const Eigen::Matrix<float, 12, 1>& p_feet_desired);
+
+    Vector12f getKinForceM(const Vector12f &p_feet_desired,
+                                             const Matrix3f &M);
+
+    Vector12f getKinForce(const Vector12f &p_feet_desired);
+
+    Vector12f getFpForce(const Vector12f &p_feet_desired);
+
     void getDynMat(Eigen::Matrix<float, 3, 12> &Mat_lin,
                    Eigen::Matrix<float, 3, 12> &Mat_rot);
+
     float getGroundWeight();
-    Eigen::Matrix<float, 12, 1> getFpTarget();
-    void getAccState(Eigen::Matrix<float, 6, 1> &acc_body);
-    int getGaitIndex(const std::vector<Eigen::Matrix<int, 4, 1>>&D_vec, const std::vector<float> &cost_vec);
-    static Eigen::Matrix3f conjMatrix(const Eigen::Vector3f &vec);
+
+    Vector12f getFpTarget();
+
+    void getAccState(Vector6f &acc_body);
+
+    int getGaitIndex(const std::vector<Eigen::Vector4i> &D_vec, const std::vector<float> &cost_vec);
+
+    static Matrix3f conjMatrix(const Vector3f &vec);
 
     float time_{0};
     static constexpr int sample_t_{175}; // 175*0.002 = 0.35s(~3Hz) half period
     Kinematics kin_;
     BodyPoseEstimator est_;
-    Eigen::Matrix<float, 12, 1> p_feet_default_;
+    Vector12f p_feet_default_;
     MultiQp multiQp_;
     unsigned int grf_index_{0};
     ros::NodeHandle &n_;
