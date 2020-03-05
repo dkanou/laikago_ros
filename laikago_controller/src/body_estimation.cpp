@@ -45,12 +45,12 @@ BodyPoseEstimator::BodyPoseEstimator() {
 
 void BodyPoseEstimator::update() {
 
-    float process_noise_pimu = 0.2;
-    float process_noise_vimu = 0.2;
-    float process_noise_pfoot = 0.0002;
-    float sensor_noise_pimu_rel_foot = 0.001;
-    float sensor_noise_vimu_rel_foot = 0.1;
-    float sensor_noise_zfoot = 0.001;
+    float process_noise_pimu = 0.02; // 0.02
+    float process_noise_vimu = 0.02; // 0.02
+    float process_noise_pfoot = 0.002; // 0.002
+    float sensor_noise_pimu_rel_foot = 0.001; // 0.001
+    float sensor_noise_vimu_rel_foot = 0.1; // 0.1
+    float sensor_noise_zfoot = 0.001; // 0.001
 
     Eigen::Matrix<float, 18, 18> Q = Eigen::Matrix<float, 18, 18>::Identity();
     Q.block(0, 0, 3, 3) = _Q0.block(0, 0, 3, 3) * process_noise_pimu;
@@ -105,12 +105,12 @@ void BodyPoseEstimator::update() {
 
         // printf("Trust %d: %.3f\n", i, trust);
         Q.block(qindex, qindex, 3, 3) =
-                (1 + (1 - trust) * 100) * Q.block(qindex, qindex, 3, 3);
+                (1 + (1 - trust) * 1e3) * Q.block(qindex, qindex, 3, 3);
         R.block(rindex1, rindex1, 3, 3) = 1 * R.block(rindex1, rindex1, 3, 3);
         R.block(rindex2, rindex2, 3, 3) =
-                (1 + (1 - trust) * 100.0f) * R.block(rindex2, rindex2, 3, 3);
+                (1 + (1 - trust) * 1e3) * R.block(rindex2, rindex2, 3, 3);
         R(rindex3, rindex3) =
-                (1 + (1 - trust) * 100) * R(rindex3, rindex3);
+                (1 + (1 - trust) * 1e3) * R(rindex3, rindex3);
 
         trusts(i) = trust;
 

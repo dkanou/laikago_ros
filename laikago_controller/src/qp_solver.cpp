@@ -11,7 +11,7 @@ QpProblem::QpProblem() {
     opti.minimize(cost);
 
     // friction cone
-    double mu = 0.3;
+    double mu = 0.6;
     for (int i = 0; i < 4; i++) {
         opti.subject_to(u(3 * i + 2) >= 0);
         opti.subject_to(u(3 * i + 0) <= mu * u(3 * i + 2));

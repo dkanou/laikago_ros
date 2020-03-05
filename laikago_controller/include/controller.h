@@ -54,17 +54,22 @@ private:
 
     void updateStance();
 
-    Vector12f getKinForceM(const Vector12f &p_feet_desired,
-                                             const Matrix3f &M);
+    Vector12f getFeetForce(const Vector12f &p_feet_desired,
+                           const Matrix3f &M,
+                           float kp);
 
     Vector12f getKinForce(const Vector12f &p_feet_desired);
 
     Vector12f getFpForce(const Vector12f &p_feet_desired);
 
+    void addGravity(Vector12f &feet_force);
+
     void getDynMat(Eigen::Matrix<float, 3, 12> &Mat_lin,
                    Eigen::Matrix<float, 3, 12> &Mat_rot);
 
     float getGroundWeight();
+
+    Vector3f getSpeedCmd();
 
     Vector12f getFpTarget();
 
@@ -85,7 +90,7 @@ private:
     ros::Subscriber param_sub_;
     ros::Publisher controlState_pub_;
     laikago_msgs::ControlState controlState_;
-    float kp_kin_{1200};
+    float kp_kin_{1000};
     float kp_[3]{0, 0, 0};
     float kd_[3]{0, 0, 0};
     float kt_[6]{};

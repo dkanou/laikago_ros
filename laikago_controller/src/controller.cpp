@@ -35,11 +35,12 @@ void Controller::sendCommand() {
 
     // force from feet kinematics
     Vector12f p_feet_desired(p_feet_default_);
-    p_feet_desired(0 + 1) -= 0.03;
-    p_feet_desired(3 + 1) += 0.03;
-    p_feet_desired(6 + 1) -= 0.03;
-    p_feet_desired(9 + 1) += 0.03;
+    p_feet_desired(0 + 1) -= 0.1 *(1 - fmin(fmax(time_ - 10, 0) / 5.0, 1));
+    p_feet_desired(3 + 1) += 0.1 *(1 - fmin(fmax(time_ - 10, 0) / 5.0, 1));
+    p_feet_desired(6 + 1) -= 0.1 *(1 - fmin(fmax(time_ - 10, 0) / 5.0, 1));
+    p_feet_desired(9 + 1) += 0.1 *(1 - fmin(fmax(time_ - 10, 0) / 5.0, 1));
     Vector12f feet_force_kin = getKinForce(p_feet_desired);
+    addGravity(feet_force_kin);
 
     // matrix of feet force to acceleration
     Eigen::Matrix<float, 3, 12> Mat_lin;
@@ -214,21 +215,22 @@ void Controller::updateStance() {
     }
 }
 
-Vector12f Controller::getKinForceM(const Vector12f &p_feet_desired,
-                                                     const Matrix3f &M) {
+Vector12f Controller::getFeetForce(const Vector12f &p_feet_desired,
+                                   const Matrix3f &M,
+                                   float kp) {
     Matrix12f M_imu = Matrix12f::Zero();
     for (int i = 0; i < 4; i++) {
         M_imu.block(3 * i, 3 * i, 3, 3) = M;
     }
     Vector12f p_feet_error = p_feet_desired - M_imu * kin_.p_feet_;
-    Vector12f feet_force_kin = kp_kin_ * p_feet_error;
+    Vector12f feet_force_kin = kp * p_feet_error;
 
     return M_imu.transpose() * feet_force_kin;
 }
 
 Vector12f Controller::getKinForce(const Vector12f &p_feet_desired) {
     auto M = Matrix3f::Identity();
-    return getKinForceM(p_feet_desired, M);
+    return getFeetForce(p_feet_desired, M, kp_kin_);
 }
 
 Vector12f Controller::getFpForce(const Vector12f &p_feet_desired) {
@@ -236,7 +238,7 @@ Vector12f Controller::getFpForce(const Vector12f &p_feet_desired) {
     static unsigned int s_ptime{0};
     s_ptime = (s_ptime + 1) % sample_t_;
     float k_w = fmin(1, fmax(0, float(s_ptime) / sample_t_));
-    return getKinForceM(p_feet_desired, R_rp) * k_w;
+    return getFeetForce(p_feet_desired, R_rp, kp_kin_*k_w);
 }
 
 void Controller::getDynMat(Eigen::Matrix<float, 3, 12> &Mat_lin,
@@ -259,6 +261,12 @@ float Controller::getGroundWeight() {
     return ground_weight;
 }
 
+Vector3f Controller::getSpeedCmd() {
+    Vector3f bodySpeed_cmd;
+    bodySpeed_cmd << 0.00 + kt_[0], 0.00 + kt_[1], 0;
+    return bodySpeed_cmd;
+}
+
 Vector12f Controller::getFpTarget() {
     Vector12f p_feet_desired_fp(p_feet_default_);
     for (int i = 0; i < 4; i++) {
@@ -269,10 +277,11 @@ Vector12f Controller::getFpTarget() {
         Vector3f p_feet_gain;
         p_feet_temp << vel_x_, vel_y_, height_z;
         p_feet_gain << k_x, k_y, 1;
-        Vector3f p_feet_delta;
+        Vector3f bodySpeed_cmd = getSpeedCmd();
+        Vector3f p_feet_delta = (kin_.R_yaw_.transpose() * p_feet_temp - 0.0*bodySpeed_cmd).array()*p_feet_gain.array();
         Vector3f bodySpeed_offset;
-        bodySpeed_offset << 0.01 + kt_[2], 0.005 + kt_[3], 0;
-        p_feet_delta = (kin_.R_yaw_.transpose() * p_feet_temp).array()*p_feet_gain.array() + bodySpeed_offset.array();
+        bodySpeed_offset << 0.03 + kt_[2], 0.007 + kt_[3], 0;
+        p_feet_delta +=  bodySpeed_offset;
         p_feet_desired_fp.segment(3 * i, 3) += p_feet_delta;
     }
     return p_feet_desired_fp;
@@ -281,13 +290,12 @@ Vector12f Controller::getFpTarget() {
 void Controller::getAccState(Vector6f &acc_body) {
     Eigen::DiagonalMatrix<float, 6> kp_body, kd_body;
     kp_body.diagonal() << 700 * .0, 700 * .0, 7000, 300, 300, 30;
-    kd_body.diagonal() << 10, 30, 0, 0, 0, 1;
+    kd_body.diagonal() << 10, 10, 0, 0, 0, 0.5;
     Vector6f desired_pos_body, pos_body, vel_body;
-    Vector3f bodySpeed_offset;
     desired_pos_body << 0, 0, 0.4,
             (0 + kp_[0]) * float(M_PI) / 180,
             (0 + kp_[1]) * float(M_PI) / 180,
-            (0 + kp_[2]) * float(M_PI) / 180;
+            (0 + kp_[2]) * float(M_PI) / 180 + yaw_offset_;
     pos_body << est_.worldState_.bodyPosition.x,
             est_.worldState_.bodyPosition.y,
             est_.worldState_.bodyPosition.z,
@@ -296,8 +304,8 @@ void Controller::getAccState(Vector6f &acc_body) {
             est_.worldState_.bodySpeed.y,
             est_.worldState_.bodySpeed.z,
             kin_.dq_imu_;
-    bodySpeed_offset << 0.00 + kt_[0], 0.00 + kt_[1], 0;
-    vel_body.segment(0, 3) += kin_.R_yaw_ * bodySpeed_offset;
+    Vector3f bodySpeed_cmd = getSpeedCmd();
+    vel_body.segment(0, 3) += kin_.R_yaw_ * bodySpeed_cmd;
     // todo: add gravity. Note: since the mass is simplify, the g is not 9.8, need to tune it.
     acc_body = kp_body * (desired_pos_body - pos_body) - kd_body * vel_body;
 }
@@ -321,7 +329,7 @@ int Controller::getGaitIndex(const std::vector<Eigen::Vector4i> &D_vec, const st
     auto R_rp = kin_.R_yaw_.transpose() * kin_.R_imu_;
     std::vector<float> feet_error_sums{};
     std::vector<float> total_cost_vec{};
-    float feet_err_weight = 200;
+    float feet_err_weight = 300;
     if (abs(kt_[0]) > 0.02 or abs(kt_[1]) > 0.02) // todo: a better way
         feet_err_weight *= 2;
 
@@ -344,6 +352,11 @@ int Controller::getGaitIndex(const std::vector<Eigen::Vector4i> &D_vec, const st
     }
 
     return std::min_element(total_cost_vec.begin(), total_cost_vec.end()) - total_cost_vec.begin();;
+}
+
+void Controller::addGravity(Vector12f &feet_force) {
+    for (int i=0; i<4; i++)
+        feet_force(3*i+2) += -40;
 }
 
 
